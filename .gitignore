@@ -399,3 +399,15 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Chặn file rác của PlatformIO
+**/.pio/
+**/.vscode/
+**/.dnx/
+**/obj/
+**/bin/
+
+# Chặn file thực thi nặng
+*.bin
+*.elf
+*.hex
