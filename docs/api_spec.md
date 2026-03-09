@@ -1,68 +1,104 @@
-TÀI LIỆU TÍCH HỢP HỆ THỐNG CHẤM CÔNG IOT (BKU)
+Gemini đã nói
 
-Dự án: Đồ án đa ngành hướng Công nghệ phần mềm (CE \& CS)
-
-Nền tảng IoT Core: HiveMQ Cloud (AWS Provider)
+Chào các bạn nhóm CS, đây là bản tài liệu hướng dẫn chi tiết từ A-Z để thiết lập "đường hầm" ngrok và kết nối hệ thống với HiveMQ Cloud cho đồ án đa ngành của chúng ta. Vì chúng ta làm việc khác mạng Wi-Fi, bộ đôi ngrok (nhận ảnh) và HiveMQ (gửi lệnh) là giải pháp tối ưu để thông suốt dữ liệu.
 
 
 
-1\. Quy trình vận hành \& Đường đi của gói tin
+TÀI LIỆU TÍCH HỢP HỆ THỐNG: NGOK \& HIVEMQ CLOUD
 
-Hệ thống vận hành theo một vòng lặp khép kín giữa phần cứng và phần mềm:
+Dự án: Hệ thống chấm công IoT (CE \& CS)
 
-
-
-Giai đoạn Thu thập (Chụp ảnh): Người dùng đứng trước ESP32-CAM. Chip thực hiện chụp ảnh và đóng gói dữ liệu.
+Mục tiêu: Nhận ảnh UXGA từ ESP32-CAM và gửi lệnh điều khiển về ESP32 Controller qua Internet.
 
 
 
-Đường đi 1 (ESP32-CAM -> Server): Gói tin chứa ảnh được gửi qua giao thức HTTP POST trực tiếp đến địa chỉ API của Web App/Server do nhóm CS quản lý.
+1\. Hướng dẫn A-Z cài đặt ngrok cho nhóm CS
+
+Ngrok sẽ biến Server chạy trên máy tính cá nhân của các bạn thành một địa chỉ HTTPS công khai để ESP32-CAM có thể đẩy ảnh lên.
 
 
 
-Giai đoạn Xử lý (AI Recognition): Server nhận ảnh, chạy model nhận diện khuôn mặt để xác định danh tính nhân viên.
+Bước 1: Tải và Đăng ký
+
+Truy cập ngrok.com và tạo một tài khoản miễn phí.
 
 
 
-Đường đi 2 (Server -> HiveMQ Cloud): Sau khi có kết quả, Server đóng vai trò là MQTT Publisher, gửi một bản tin JSON lên HiveMQ Cloud qua Topic bku/attendance/gate/control.
+Tải bản cài đặt phù hợp với hệ điều hành (Windows/macOS) và giải nén.
 
 
 
-Đường đi 3 (HiveMQ Cloud -> ESP32 Controller): ESP32 Controller (đang ở trạng thái Subscribe) nhận bản tin từ Cloud gần như tức thì, thực hiện mở cửa và hiện thông báo lên LCD.
+Bước 2: Xác thực (AuthToken)
+
+Sau khi tải về, các bạn mở Terminal/Command Prompt tại thư mục chứa file ngrok và gõ lệnh sau để lưu token (chỉ làm 1 lần duy nhất):
+
+ngrok config add-authtoken <TOKEN\_CUA\_BAN>
 
 
 
-2\. Đặc tả gói tin (Data Formats)
+Bước 3: Kích hoạt "Đường hầm"
 
-A. Gói tin gửi từ ESP32-CAM (Upstream)
-
-Để các bạn CS dễ dàng xử lý bằng các thư viện AI như OpenCV, gói tin gửi đi nên ở dạng Binary Image:
+Khởi động Web Server của nhóm (ví dụ Node.js hoặc Python đang chạy ở port 5000).
 
 
 
-Giao thức: HTTP POST.
+Trong Terminal, gõ lệnh: ngrok http 5000.
 
 
 
-Content-Type: multipart/form-data hoặc image/jpeg.
+Lấy link: Tìm dòng Forwarding, các bạn sẽ thấy một link có dạng https://abcd-123.ngrok-free.app.
 
 
 
-Dữ liệu: Toàn bộ mảng byte của ảnh JPEG. Việc gửi ảnh thô giúp Server không mất thời gian giải mã chuỗi phức tạp.
+Gửi link này cho thành viên CE để nạp vào code ESP32-CAM.
 
 
 
-B. Gói tin điều khiển từ Server (Downstream)
-
-Gói tin từ Server gửi xuống thiết bị điều khiển của Kiên phải tuân thủ cấu trúc JSON để dễ bóc tách bằng thư viện ArduinoJson:
+Lưu ý: Với bản ngrok miễn phí, mỗi lần các bạn tắt đi bật lại thì link sẽ bị thay đổi. Hãy báo ngay cho CE mỗi khi có link mới.
 
 
 
-Topic: bku/attendance/gate/control
+2\. Thông số hạ tầng HiveMQ Cloud (Cố định)
+
+Sau khi AI nhận diện xong, các bạn cần gửi lệnh "unlock" qua HiveMQ Cloud để mở cửa. Thông số Cluster thực tế như sau:
 
 
 
-Định dạng mẫu:
+Thông số	Giá trị thực tế
+
+Cluster URL	2ee617fd7b3842639f968abf50a4670f.s1.eu.hivemq.cloud
+
+WebSocket Port	8884 (Bắt buộc cho Web App)
+
+Username	hcmut\_attendance
+
+Password	(Theo mật khẩu nhóm đã thống nhất)
+
+Topic	bku/attendance/gate/control
+
+Thư viện đề xuất: Sử dụng mqtt.js để kết nối từ trình duyệt Web App qua giao thức wss://.
+
+
+
+3\. Đặc tả gói tin (Data Formats)
+
+A. Nhận ảnh từ ESP32-CAM (Upstream)
+
+Giao thức: HTTPS POST (qua ngrok).
+
+
+
+Định dạng: Binary Image (image/jpeg).
+
+
+
+Độ phân giải: UXGA (1600x1200) - Các bạn sẽ nhận được mảng byte ảnh JPEG chất lượng cao nhất để chạy OpenCV.
+
+
+
+B. Gửi lệnh điều khiển (Downstream)
+
+Sau khi AI xác định danh tính, hãy Publish một bản tin JSON lên Topic trên HiveMQ:
 
 
 
@@ -72,49 +108,27 @@ JSON
 
 &nbsp; "command": "unlock",
 
-&nbsp; "name": "Nguyen Van A",
+&nbsp; "name": "Ten Nhan Vien",
 
-&nbsp; "id": "211xxxx",
+&nbsp; "id": "MSSV",
 
 &nbsp; "status": "success"
 
 }
 
-3\. Thông số kết nối HiveMQ (Thực tế)
+4\. Quy trình vận hành tổng thể
 
-Các bạn CS cần cấu hình Web App kết nối theo các thông số sau:
-
-
-
-Cluster URL: 2ee617fd7b3842639f968abf50a4670f.s1.eu.hivemq.cloud
+CE: Chụp ảnh UXGA -> Gửi qua link ngrok.
 
 
 
-Cổng MQTT (Dành cho ESP32): 8883 (TLS)
+CS: Nhận ảnh qua ngrok -> Chạy AI nhận diện -> Publish JSON lên HiveMQ.
 
 
 
-Cổng WebSocket (Dành cho Web App): 8884
+CE: ESP32 Controller nhận JSON -> Quay Servo mở cửa \& Hiện LCD.
 
 
 
-TLS WebSocket URL: wss://2ee617fd7b3842639f968abf50a4670f.s1.eu.hivemq.cloud:8884/mqtt
-
-
-
-Thông tin đăng nhập: Sử dụng Credentials hcmut\_attendance đã được kích hoạt quyền PUBLISH\_SUBSCRIBE.
-
-
-
-4\. Hướng dẫn cho nhóm CS (Web App)
-
-Thư viện: Khuyên dùng mqtt.js để kết nối từ trình duyệt.
-
-
-
-Kết nối: Web App phải sử dụng cổng 8884 và giao thức WSS vì HiveMQ Cloud bắt buộc kết nối bảo mật.
-
-
-
-Config: Các bạn có thể dùng mục Web Client trực tiếp trên console HiveMQ để gửi thử gói tin JSON và xem Kiên đã nhận được chưa.
+Các bạn CS có thể dùng mục Web Client trên HiveMQ Console để test gửi lệnh JSON thủ công xem phía phần cứng đã nhận được chưa.
 
