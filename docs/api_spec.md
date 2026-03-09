@@ -1,5 +1,3 @@
-Gemini đã nói
-
 Chào các bạn nhóm CS, đây là bản tài liệu hướng dẫn chi tiết từ A-Z để thiết lập "đường hầm" ngrok và kết nối hệ thống với HiveMQ Cloud cho đồ án đa ngành của chúng ta. Vì chúng ta làm việc khác mạng Wi-Fi, bộ đôi ngrok (nhận ảnh) và HiveMQ (gửi lệnh) là giải pháp tối ưu để thông suốt dữ liệu.
 
 
@@ -58,7 +56,37 @@ Lưu ý: Với bản ngrok miễn phí, mỗi lần các bạn tắt đi bật l
 
 
 
-2\. Thông số hạ tầng HiveMQ Cloud (Cố định)
+2. Đặc tả định dạng ảnh (Image Format)
+
+Đây là phần quan trọng để các bạn cấu hình hàm nhận ảnh trên Server:
+
+
+
+Định dạng file: .jpg (JPEG chuẩn).
+
+
+
+Độ phân giải: UXGA (1600x1200) - Mức cao nhất để AI nhận diện nét nhất.
+
+
+
+Kiểu dữ liệu (Payload): Raw Binary (Mảng byte thô).
+
+
+
+Lưu ý cho CS: Phía CE không gửi chuỗi Base64 hay Multipart-form để tiết kiệm RAM cho ESP32. Các bạn chỉ cần đọc trực tiếp request body dưới dạng buffer và ghi vào file .jpg là xong.
+
+
+
+Mime-Type: image/jpeg.
+
+
+
+Dung lượng dự kiến: Khoảng 300 KB - 600 KB mỗi tấm ảnh.
+
+
+
+3. Thông số hạ tầng HiveMQ Cloud (Cố định)
 
 Sau khi AI nhận diện xong, các bạn cần gửi lệnh "unlock" qua HiveMQ Cloud để mở cửa. Thông số Cluster thực tế như sau:
 
@@ -80,7 +108,7 @@ Thư viện đề xuất: Sử dụng mqtt.js để kết nối từ trình duy�
 
 
 
-3\. Đặc tả gói tin (Data Formats)
+4. Đặc tả gói tin (Data Formats)
 
 A. Nhận ảnh từ ESP32-CAM (Upstream)
 
@@ -106,17 +134,17 @@ JSON
 
 {
 
-&nbsp; "command": "unlock",
+  "command": "unlock",
 
-&nbsp; "name": "Ten Nhan Vien",
+  "name": "Ten Nhan Vien",
 
-&nbsp; "id": "MSSV",
+  "id": "MSSV",
 
-&nbsp; "status": "success"
+  "status": "success"
 
 }
 
-4\. Quy trình vận hành tổng thể
+5. Quy trình vận hành tổng thể
 
 CE: Chụp ảnh UXGA -> Gửi qua link ngrok.
 
