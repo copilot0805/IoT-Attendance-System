@@ -79,6 +79,77 @@ const enrollUserService = async (userData, file) => {
     }
 };
 
+const updatePhotoService = async (id, file) => {
+    const client = await pool.connect();
+    console.log('Qua service updatePhotoService với data:', { id, originalname: file.originalname });
+    try {
+        // 1. Kiểm tra user tồn tại
+        const userResult = await client.query('SELECT user_id FROM users WHERE user_id = $1', [id]);
+        if (userResult.rowCount === 0) {
+            console.log(`User with ID ${id} not found`);
+            throw new Error('USER_NOT_FOUND: Người dùng không tồn tại');
+        }
+
+        // 2. Gọi AI microservice trích xuất vector
+        const form = new FormData();
+        form.append('file', file.buffer, {
+            filename: file.originalname,
+            contentType: file.mimetype,
+        });
+
+        const aiResponse = await axios.post('http://127.0.0.1:5001/extract', form, {
+            headers: form.getHeaders(),
+        });
+
+        const vectorArray = aiResponse.data.vector;
+        const modelVersion = aiResponse.data.model || 'ArcFace';
+        const vectorString = `[${vectorArray.join(',')}]`;
+
+        const vectorResult = await client.query(
+            `SELECT vector_id FROM face_vectors WHERE user_id = $1 AND is_active = TRUE AND vector = $2`,
+            [id, vectorString]
+        );
+        if (vectorResult.rowCount > 0) {
+            throw new Error('SAME_PHOTO: Ảnh khuôn mặt không thay đổi');
+        }
+
+        // 3. Lưu vector mới vào face_vectors
+        const insertResult = await client.query(
+            `INSERT INTO face_vectors (user_id, vector, model_version, is_active)
+             VALUES ($1, $2, $3, TRUE)
+             RETURNING vector_id, model_version, is_active, created_at, updated_at`,
+            [id, vectorString, modelVersion]
+        );
+
+        return {
+            success: true,
+            data: {
+                face_vector: insertResult.rows[0]
+            }
+        };
+
+    } catch (error) {
+        console.error('Service Error (updatePhotoService):', error);
+        if (error.response && error.response.data) {
+            throw new Error('AI_ERROR: ' + error.response.data.error);
+        }
+        if (error.code === '22P02') {
+            throw new Error('USER_NOT_FOUND: Người dùng không tồn tại');
+        }
+
+        if (error.message.startsWith('SAME_PHOTO:')) {
+            throw error;
+        }
+        if (error.message.startsWith('USER_NOT_FOUND:')) {
+            throw error;
+        }
+        throw new Error('DB_ERROR: Lỗi hệ thống nội bộ');
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = {
-    enrollUserService
+    enrollUserService,
+    updatePhotoService
 };

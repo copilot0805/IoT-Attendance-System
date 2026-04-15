@@ -1,4 +1,4 @@
-const { enrollUserService } = require('../services/adminService.js');
+const { enrollUserService, updatePhotoService } = require('../services/adminService.js');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
@@ -36,7 +36,42 @@ const postEnrollUserAPI = async (req, res) => {
     }
 };
 
+const updatePhotoAPI = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const photo = req.file;
+        if (!photo) {
+            return res.status(400).json({ error: 'Vui lòng cung cấp ảnh khuôn mặt (photo)' });
+        }
+
+        const result = await updatePhotoService(id, photo);
+
+        // 3. Trả kết quả thành công
+        return res.status(201).json({
+            message: 'Cập nhật ảnh khuôn mặt thành công!',
+            data: result.data
+        });
+
+    } catch (error) {
+        console.error('Controller Error (updatePhotoAPI):', error.message || error);
+        if (error.message.startsWith('AI_ERROR:')) {
+            return res.status(400).json({ error: error.message.replace('AI_ERROR: ', '') });
+        }
+        if (error.message.startsWith('SAME_PHOTO:')) {
+            return res.status(400).json({ error: error.message.replace('SAME_PHOTO: ', '') });
+        }
+        if (error.message.startsWith('USER_NOT_FOUND:')) {
+            return res.status(404).json({ error: error.message.replace('USER_NOT_FOUND: ', '') });
+        }
+        if (error.message.startsWith('INVALID_ID:')) {
+            return res.status(400).json({ error: error.message.replace('INVALID_ID: ', '') });
+        }
+        return res.status(500).json({ error: 'Lỗi hệ thống máy chủ' });
+    }
+};
+
 
 module.exports = {
     postEnrollUserAPI,
+    updatePhotoAPI
 };
