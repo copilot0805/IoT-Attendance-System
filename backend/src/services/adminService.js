@@ -6,7 +6,7 @@ const pool = require('../db');
 const enrollUserService = async (userData, file) => {
     const { full_name, email, password, role } = userData;
     const client = await pool.connect();
-
+    console.log('Qua service enrollUserService với data:', userData);
     try {
         // ==========================================
         // 1. GỌI AI MICROSERVICE TRÍCH XUẤT VECTOR
