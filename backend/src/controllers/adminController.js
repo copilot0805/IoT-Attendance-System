@@ -1,4 +1,4 @@
-const { enrollUserService, updatePhotoService } = require('../services/adminService.js');
+const { enrollUserService, updatePhotoService, deleteUserService } = require('../services/adminService.js');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
@@ -70,8 +70,29 @@ const updatePhotoAPI = async (req, res) => {
     }
 };
 
+const deleteUser = async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (!id || isNaN(parseInt(id))) {
+            return res.status(400).json({ error: 'ID không hợp lệ' });
+        }
+        const result = await deleteUserService(id);
+        return res.status(200).json({
+            message: 'Xóa người dùng thành công!',
+            data: result.data
+        });
+    } catch (error) {
+        console.error('Controller Error (deleteUser):', error.message || error);
+        if (error.message.startsWith('USER_NOT_FOUND:')) {
+            return res.status(404).json({ error: error.message.replace('USER_NOT_FOUND: ', '') });
+        } else {
+            return res.status(500).json({ error: 'Lỗi hệ thống máy chủ' });
+        }
+    }
+};
 
 module.exports = {
     postEnrollUserAPI,
-    updatePhotoAPI
+    updatePhotoAPI,
+    deleteUser
 };

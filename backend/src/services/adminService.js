@@ -149,7 +149,30 @@ const updatePhotoService = async (id, file) => {
     }
 };
 
+const deleteUserService = async (id) => {
+    const client = await pool.connect();
+    try {
+        const result = await client.query('DELETE FROM users WHERE user_id = $1 RETURNING user_id', [id]);
+        if (result.rowCount === 0) {
+            //console.log(`User with ID ${id} not found for deletion`);
+            throw new Error('USER_NOT_FOUND: Người dùng không tồn tại');
+        }
+        return {
+            success: true,
+            data: {
+                user_id: id
+            }
+        };
+    } catch (error) {
+        console.error('Service Error (deleteUserService):', error);
+        throw new Error('USER_NOT_FOUND: Người dùng không tồn tại');
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = {
     enrollUserService,
-    updatePhotoService
+    updatePhotoService,
+    deleteUserService
 };
