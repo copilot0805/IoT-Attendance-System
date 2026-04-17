@@ -125,25 +125,40 @@ Giao thức: HTTPS POST (qua ngrok).
 
 
 B. Gửi lệnh điều khiển (Downstream)
+Module gửi lệnh thông qua môi trường mạng và dùng RESTfulAPI để giao tiếp 
+Sau khi AI xác định danh tính, thì module AI sẽ push kết quả theo các dạng sau
 
-Sau khi AI xác định danh tính, hãy Publish một bản tin JSON lên Topic trên HiveMQ:
-
-
-
+* Khi nhận diện thành công
 JSON
-
+```
+        {
+            "match": True,
+            "user": user_name,
+            "command": "unlock",
+            "name": user_name,
+            "id": person_id,
+            "status": "success"
+        }
+```
+* Khi nhận diện thất bại - trong trường hợp không có error nào xảy ra trong quá trình nhận diện
+JSON
+```
 {
-
-  "command": "unlock",
-
-  "name": "Ten Nhan Vien",
-
-  "id": "MSSV",
-
-  "status": "success"
-
+    "match": False,
+    "user": null,
+    "person_id": null,
+    "status": "failed"
 }
-
+```
+* Khi lỗi xảy ra trong quá trình nhận diện
+JSON
+```
+{
+    "match": False,
+    "error": error_message,
+    "status": "failed"
+}
+```
 5. Quy trình vận hành tổng thể
 
 CE: Chụp ảnh UXGA -> Gửi qua link ngrok.
