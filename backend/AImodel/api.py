@@ -7,8 +7,6 @@ import json
 import ssl
 import numpy as np
 import cv2
-import paho.mqtt.client as mqtt
-from MQTT_handler import MQTT_handler
 from fastapi.responses import HTMLResponse
 app = FastAPI()
 
@@ -88,8 +86,18 @@ async def verify_face(request: Request):
             "status": "success"
         }
 
+    ## handle error nếu có lỗi trong quá trình nhận diện
+    error_message = result.get("error", "")
+    if error_message:
+        return {
+            "match": False,
+            "error": error_message,
+            "status": "failed"
+        }
     return {
         "match": False,
+        "user": None,
+        'person_id': None,
         "status": "failed"
     }
 if __name__ == "__main__":
