@@ -48,5 +48,5 @@ def extract_vector():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    print("🚀 AI Microservice đang chạy ở port 5001...")
-    app.run(port=5001, debug=False)
+    print("🚀 AI Microservice đang chạy ở port 5000...")
+    app.run(port=5000, debug=False)

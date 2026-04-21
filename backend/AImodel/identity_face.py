@@ -11,7 +11,14 @@ if gpus:
     print(f"Đã phát hiện {len(gpus)} GPU:")
 else:
     print("Không phát hiện GPU nào. TensorFlow sẽ sử dụng CPU, có thể chậm hơn nhiều.")
-    
+
+'''Hệ thống hiện tại chỉ sử dụng 1 ảnh cho mỗi người nhằm mục đích demo, nên độ chính xác chưa cao. 
+Trong thực tế, bạn nên cung cấp nhiều ảnh cho mỗi người để cải thiện khả năng nhận diện. 
+Khi đó, cần điều chỉnh lại logic (ví dụ: lưu nhiều embedding cho mỗi người và so sánh toàn bộ để đưa ra kết quả chính xác hơn).
+Các ảnh trong “database” hiện được lưu cục bộ trên máy của người phát triển (dưới dạng file), chưa phải là một cơ sở dữ liệu hoàn chỉnh.
+Vì vậy, khi clone repository về máy khác, chương trình có thể không chạy được ngay do thiếu dữ liệu ảnh.
+Để test, bạn cần tự thêm ảnh của mình vào thư mục dữ liệu tương ứng hoặc thay đổi đường dẫn cho phù hợp với môi trường của bạn.'''
+
 DATABASE = {
     "user1": "img2.png",
     "user2": "usr2.jpg",
