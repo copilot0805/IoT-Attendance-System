@@ -8,6 +8,7 @@ import ssl
 import numpy as np
 import cv2
 from fastapi.responses import HTMLResponse
+from deepface import DeepFace
 app = FastAPI()
 
 @app.get("/", response_class=HTMLResponse)
@@ -100,6 +101,37 @@ async def verify_face(request: Request):
         'person_id': None,
         "status": "failed"
     }
+
+    from starlette.concurrency import run_in_threadpool
+
+@app.post("/extract")
+async def extract_face(request: Request):
+    # Đọc raw binary y hệt luồng verify-face
+    contents = await request.body()
+    nparr = np.frombuffer(contents, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    if img is None:
+        raise HTTPException(status_code=400, detail="Không thể đọc dữ liệu ảnh thô (Raw Image)")
+
+    try:
+        def get_embedding(image):
+            return DeepFace.represent(
+                img_path=image,
+                model_name="ArcFace",
+                detector_backend="opencv",
+                enforce_detection=True,
+                align=False
+            )
+        
+        result = await run_in_threadpool(get_embedding, img)
+        return {"vector": result[0]["embedding"], "model": "ArcFace"}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh, vui lòng chụp lại rõ hơn")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("api:app", host="0.0.0.0", port=5000, reload=True)

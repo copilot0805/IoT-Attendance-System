@@ -7,8 +7,11 @@ const {
 const { handleLogin } = require('../controllers/userController');
 const { auth, checkRole } = require('../middleware/auth');
 const uploadPhoto = require('../middleware/uploadPhoto');
+const { postAttendanceAPI } = require('../controllers/attendanceController');
 
 const routerAPI = express.Router();
+
+routerAPI.post('/attendance', express.raw({ type: 'image/jpeg', limit: '10mb' }), postAttendanceAPI);
 
 routerAPI.all("*", auth) // Apply auth middleware to all routes in this router
 routerAPI.post('/login', handleLogin);

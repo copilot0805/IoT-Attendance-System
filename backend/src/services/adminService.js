@@ -19,8 +19,10 @@ const enrollUserService = async (userData, file) => {
         });
 
         // Gửi ảnh sang port 5001 (Python AI)
-        const aiResponse = await axios.post('http://127.0.0.1:5001/extract', form, {
-            headers: form.getHeaders(),
+        const aiResponse = await axios.post('http://127.0.0.1:5000/extract', file.buffer, {
+            headers: {
+                'Content-Type': 'image/jpeg'
+            }
         });
 
         const vectorArray = aiResponse.data.vector;
@@ -67,7 +69,7 @@ const enrollUserService = async (userData, file) => {
 
         // Phân loại lỗi để Controller dễ dàng trả về HTTP Status code tương ứng
         if (error.response && error.response.data) {
-            throw new Error('AI_ERROR: ' + error.response.data.error);
+            throw new Error('AI_ERROR: ' + (error.response.data.detail || error.response.data.error));
         }
         if (error.code === '23505') {
             throw new Error('EMAIL_EXISTS: Email này đã tồn tại trong hệ thống');
@@ -97,8 +99,10 @@ const updatePhotoService = async (id, file) => {
             contentType: file.mimetype,
         });
 
-        const aiResponse = await axios.post('http://127.0.0.1:5001/extract', form, {
-            headers: form.getHeaders(),
+        const aiResponse = await axios.post('http://127.0.0.1:5000/extract', file.buffer, {
+            headers: {
+                'Content-Type': 'image/jpeg'
+            }
         });
 
         const vectorArray = aiResponse.data.vector;
@@ -131,7 +135,7 @@ const updatePhotoService = async (id, file) => {
     } catch (error) {
         console.error('Service Error (updatePhotoService):', error);
         if (error.response && error.response.data) {
-            throw new Error('AI_ERROR: ' + error.response.data.error);
+            throw new Error('AI_ERROR: ' + (error.response.data.detail || error.response.data.error));
         }
         if (error.code === '22P02') {
             throw new Error('USER_NOT_FOUND: Người dùng không tồn tại');
