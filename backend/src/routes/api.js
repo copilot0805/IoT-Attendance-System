@@ -1,25 +1,23 @@
 const express = require('express');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const {
-    getUsersAPI,
-    postCreateUserAPI,
     postEnrollUserAPI,
-    putUpdateUserAPI,
-    deleteUserAPI
+    updatePhotoAPI,
+    deleteUser,
 } = require('../controllers/adminController');
-
-const uploadDir = path.join(__dirname, '../uploads/face_enroll');
-fs.mkdirSync(uploadDir, { recursive: true });
-const uploadMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const { handleLogin } = require('../controllers/userController');
+const { auth, checkRole } = require('../middleware/auth');
+const uploadPhoto = require('../middleware/uploadPhoto');
+const { postAttendanceAPI } = require('../controllers/attendanceController');
 
 const routerAPI = express.Router();
 
-// routerAPI.get('/users', getUsersAPI);
-// routerAPI.post('/users', postCreateUserAPI);
-routerAPI.post('/users/enroll', uploadMemory.single('photo'), postEnrollUserAPI);
-// routerAPI.put('/users/:id', putUpdateUserAPI);
-// routerAPI.delete('/users/:id', deleteUserAPI);
+routerAPI.post('/attendance', express.raw({ type: 'image/jpeg', limit: '10mb' }), postAttendanceAPI);
 
+routerAPI.all("*", auth) // Apply auth middleware to all routes in this router
+routerAPI.post('/login', handleLogin);
+routerAPI.post('/users/login', handleLogin);
+
+routerAPI.post('/users/enroll', checkRole(['ADMIN']), uploadPhoto.single('photo'), postEnrollUserAPI);
+routerAPI.put('/users/:id', checkRole(['ADMIN']), uploadPhoto.single('photo'), updatePhotoAPI);
+routerAPI.delete('/users/:id', checkRole(['ADMIN']), deleteUser);
 module.exports = routerAPI;
