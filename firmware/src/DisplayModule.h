@@ -5,8 +5,6 @@
 
 #define I2C_SDA 21
 #define I2C_SCL 47
-// #define I2C_SDA 1
-// #define I2C_SCL 2
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -18,18 +16,6 @@ void initLCD() {
     lcd.setCursor(0, 0);
     lcd.print("System Booting..");
 }
-// // TÁCH HÀM KHỞI TẠO RA NGOÀI ĐỂ CHẠY TRONG SETUP (CORE 1)
-// void initLCD() {
-//     // 1. Ép cứng chân I2C mặc định cho toàn bộ thư viện
-//     Wire.setPins(I2C_SDA, I2C_SCL); 
-//     Wire.begin();                   
-    
-//     // 2. Bây giờ gọi init nó sẽ không bị chạy sai chân nữa
-//     lcd.init();
-//     lcd.backlight();
-//     lcd.setCursor(0, 0);
-//     lcd.print("System Booting..");
-// }
 
 void TaskLCD(void *pvParameters) {
     SystemState lastState = (SystemState)-1; // Kích hoạt vẽ lần đầu
