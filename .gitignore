@@ -411,3 +411,6 @@ FodyWeavers.xsd
 *.bin
 *.elf
 *.hex
+
+#venv
+venv/

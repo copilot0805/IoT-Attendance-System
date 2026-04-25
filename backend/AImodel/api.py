@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 from fastapi.responses import HTMLResponse
 from deepface import DeepFace
+from starlette.concurrency import run_in_threadpool
 app = FastAPI()
 
 @app.get("/", response_class=HTMLResponse)
@@ -25,7 +26,7 @@ async def upload_page():
             async function upload() {
                 const file = document.getElementById("fileInput").files[0];
 
-                const response = await fetch("/verify-face", {
+                const response = await fetch("/verify_face", {
                     method: "POST",
                     headers: {
                         "Content-Type": "image/jpeg"
@@ -46,7 +47,6 @@ from fastapi import Request, HTTPException
 from time import perf_counter
 import numpy as np
 import cv2
-from starlette.concurrency import run_in_threadpool
 
 @app.post("/verify-face")
 async def verify_face(request: Request):
@@ -102,7 +102,7 @@ async def verify_face(request: Request):
         "status": "failed"
     }
 
-    from starlette.concurrency import run_in_threadpool
+
 
 @app.post("/extract")
 async def extract_face(request: Request):
