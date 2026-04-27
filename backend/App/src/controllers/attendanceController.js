@@ -1,14 +1,15 @@
 const axios = require("axios");
 const pool = require("../db");
-const { publishUnlockCommand } = require("../services/mqttService");
+const { upsertDailyTimesheet } = require("../services/attendanceService");
 
 // Set up cho việc ghi log cả trong hệ thống và database
-const fs = require("fs");
-const path = require("path");
-const FALLBACK_LOG_PATH = path.join(
-  __dirname,
-  "../../logs/attendance_fallback.log",
-);
+// const fs = require("fs");
+// const path = require("path");
+// const FALLBACK_LOG_PATH = path.join(
+//   __dirname,
+//   "../../logs/attendance_fallback.log",
+// );
+
 
 // const postAttendanceAPI = async (req, res) => {
 //     try {
@@ -77,13 +78,14 @@ const postAttendanceAPI = async (req, res) => {
     // =====================================================================
     // BƯỚC 1: CHỈ NHỜ AI TRÍCH XUẤT 512 SỐ (KHÔNG CHO AI TỰ SO SÁNH NỮA)
     // =====================================================================
-    const aiResponse = await axios.post(
-      "http://host.docker.internal:5000/extract",
-      imageBuffer,
-      {
-        headers: { "Content-Type": "image/jpeg" },
-      },
-    );
+    console.log('>>> Kích thước ảnh Camera gửi AI:', req.body.length, 'bytes');
+
+    const aiResponse = await axios.post('http://127.0.0.1:5000/extract', req.body, {
+        headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': req.body.length // Chặn Axios cắt nhỏ dữ liệu
+        }
+    });
 
     const vectorArray = aiResponse.data.vector;
     const vectorString = `[${vectorArray.join(",")}]`;
@@ -117,27 +119,47 @@ const postAttendanceAPI = async (req, res) => {
       );
 
       // Logging
-      // 1. Ghi log vào file text dự phòng
-      const logEntry = `${new Date().toISOString()} | ID: ${bestMatch.user_id} | Name: ${bestMatch.full_name} | Dist: ${bestMatch.distance.toFixed(4)}\n`;
-      fs.appendFile(FALLBACK_LOG_PATH, logEntry, (err) => {
-        if (err) console.error("❌ Lỗi ghi file log dự phòng:", err);
-      });
+      // 1. Ghi log vào file text dự phòng (Luôn ghi để backup)
+      // const logEntry = `${new Date().toISOString()} | ID: ${bestMatch.user_id} | Name: ${bestMatch.full_name} | Dist: ${bestMatch.distance.toFixed(4)}\n`;
+      // fs.appendFile(FALLBACK_LOG_PATH, logEntry, (err) => {
+      //   if (err) console.error("❌ Lỗi ghi file log dự phòng:", err);
+      // });
 
-      // 2. Ghi log vào Database bảng attendance_events
-      const logQuery = `INSERT INTO attendance_events (user_id, event_type) VALUES ($1, 'CHECK_IN')`;
-      pool
-        .query(logQuery, [bestMatch.user_id])
-        .then(() =>
-          console.log(
-            `📝 [DB LOG] Đã lưu lịch sử quẹt thẻ cho ${bestMatch.full_name}`,
-          ),
-        )
-        .catch((err) =>
-          console.error("❌ [DB LOG ERROR] Lỗi ghi log database:", err.message),
+      // 2. Logic luân phiên Check-in / Check-out
+      // Tìm bản ghi quẹt thẻ gần nhất CỦA NGÀY HÔM NAY của user này
+      const checkStatusQuery = `
+        SELECT event_type 
+        FROM attendance_events 
+        WHERE user_id = $1 AND DATE(event_time) = CURRENT_DATE 
+        ORDER BY event_time DESC 
+        LIMIT 1;
+      `;
+
+      const statusResult = await pool.query(checkStatusQuery, [
+        bestMatch.user_id,
+      ]);
+
+      let nextEvent = "CHECK_IN"; // Mặc định nếu hôm nay chưa quẹt thì là vào ca
+
+      if (statusResult.rows.length > 0) {
+        const lastEvent = statusResult.rows[0].event_type;
+        // Nếu lần quẹt gần nhất là CHECK_IN, thì lần này đảo thành CHECK_OUT
+        if (lastEvent === "CHECK_IN") {
+          nextEvent = "CHECK_OUT";
+        }
+      }
+
+      // 3. Ghi trạng thái mới vào Database
+      const logQuery = `INSERT INTO attendance_events (user_id, event_type) VALUES ($1, $2)`;
+      try {
+        await pool.query(logQuery, [bestMatch.user_id, nextEvent]);
+        await upsertDailyTimesheet(bestMatch.user_id);
+        console.log(
+          `📝 [DB LOG] Đã lưu lịch sử: [${nextEvent}] cho ${bestMatch.full_name}`,
         );
-
-      // Gửi lệnh MQTT mở cửa
-      publishUnlockCommand(bestMatch.full_name, bestMatch.user_id);
+      } catch (err) {
+        console.error("❌ [DB LOG ERROR] Lỗi ghi log database:", err.message);
+      }
 
       return res.status(200).json({
         message: "Nhận diện thành công, đang mở cửa!",
@@ -155,13 +177,14 @@ const postAttendanceAPI = async (req, res) => {
 
       const errorLogEntry = `${new Date().toISOString()} | [DENIED] | Dist: ${currentDist} | ImageSize: ${imageBuffer.length} bytes\n`;
 
-      fs.appendFile(FALLBACK_LOG_PATH, errorLogEntry, (err) => {
-        if (err) console.error("❌ Lỗi ghi file log hệ thống:", err);
-        else
-          console.log(
-            "📝 [SYSTEM LOG] Đã ghi lại nỗ lực truy cập thất bại vào file.",
-          );
-      });
+      //logginf lần thất bại
+      // fs.appendFile(FALLBACK_LOG_PATH, errorLogEntry, (err) => {
+      //   if (err) console.error("❌ Lỗi ghi file log hệ thống:", err);
+      //   else
+      //     console.log(
+      //       "📝 [SYSTEM LOG] Đã ghi lại nỗ lực truy cập thất bại vào file.",
+      //     );
+      // });
 
       return res.status(403).json({
         message: "Nhận diện thất bại: Người lạ!",
@@ -179,4 +202,47 @@ const postAttendanceAPI = async (req, res) => {
   }
 };
 
-module.exports = { postAttendanceAPI };
+// Hàm lấy danh sách chấm công hôm nay cho trang Web
+const getTimesheetsAPI = async (req, res) => {
+  try {
+    // Câu lệnh SQL lấy tên User và thông tin công ngày hôm nay (CURRENT_DATE)
+    const query = `
+      SELECT u.user_id, u.full_name, 
+             dt.status, 
+             dt.working_hours,
+             TO_CHAR(dt.first_check_in, 'HH24:MI:SS') as check_in,
+             TO_CHAR(dt.last_check_out, 'HH24:MI:SS') as check_out
+      FROM users u
+      LEFT JOIN daily_timesheets dt ON u.user_id = dt.user_id AND dt.work_date = CURRENT_DATE;
+    `;
+
+    const result = await pool.query(query);
+
+    // Gửi danh sách này về cho trang Web
+    return res.status(200).json(result.rows);
+  } catch (error) {
+    console.error("Lỗi lấy bảng công:", error.message);
+    return res
+      .status(500)
+      .json({ error: "Lỗi hệ thống không lấy được bảng công" });
+  }
+};
+
+
+const getAttendanceLogsAPI = async (req, res) => {
+  try {
+    const query = `
+      SELECT u.full_name, e.event_type, e.event_time 
+      FROM attendance_events e
+      JOIN users u ON e.user_id = u.user_id
+      ORDER BY e.event_time DESC
+      LIMIT 20; -- Lấy 20 bản ghi mới nhất
+    `;
+    const result = await pool.query(query);
+    return res.status(200).json(result.rows);
+  } catch (error) {
+    return res.status(500).json({ error: "Lỗi lấy nhật ký" });
+  }
+};
+
+module.exports = { postAttendanceAPI, getTimesheetsAPI, getAttendanceLogsAPI };

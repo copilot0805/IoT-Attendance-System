@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const FormData = require('form-data');
 const pool = require('../db');
+const fs = require('fs');
 
 const enrollUserService = async (userData, file) => {
     const { full_name, email, password, role } = userData;
@@ -11,17 +12,21 @@ const enrollUserService = async (userData, file) => {
         // ==========================================
         // 1. GỌI AI MICROSERVICE TRÍCH XUẤT VECTOR
         // ==========================================
-        const form = new FormData();
-        // Sử dụng file.buffer vì ta sẽ cấu hình Multer lưu ở RAM (Memory)
-        form.append('file', file.buffer, {
-            filename: file.originalname,
-            contentType: file.mimetype,
-        });
+        // const form = new FormData();
+        // // Sử dụng file.buffer vì ta sẽ cấu hình Multer lưu ở RAM (Memory)
+        // form.append('file', file.buffer, {
+        //     filename: file.originalname,
+        //     contentType: file.mimetype,
+        // });
 
-        // Gửi ảnh sang port 5001 (Python AI)
+        // Gửi ảnh sang port 5000 (Python AI)
+
+
         const aiResponse = await axios.post('http://127.0.0.1:5000/extract', file.buffer, {
             headers: {
-                'Content-Type': 'image/jpeg'
+                'Content-Type': 'application/octet-stream',
+                // BẮT BUỘC PHẢI CÓ DÒNG NÀY ĐỂ ÉP AXIOS GỬI NGUYÊN KHỐI:
+                'Content-Length': file.buffer.length 
             }
         });
 
@@ -93,15 +98,18 @@ const updatePhotoService = async (id, file) => {
         }
 
         // 2. Gọi AI microservice trích xuất vector
-        const form = new FormData();
-        form.append('file', file.buffer, {
-            filename: file.originalname,
-            contentType: file.mimetype,
-        });
+        // const form = new FormData();
+        // form.append('file', file.buffer, {
+        //     filename: file.originalname,
+        //     contentType: file.mimetype,
+        // });
+
 
         const aiResponse = await axios.post('http://127.0.0.1:5000/extract', file.buffer, {
             headers: {
-                'Content-Type': 'image/jpeg'
+                'Content-Type': 'application/octet-stream',
+                // BẮT BUỘC PHẢI CÓ DÒNG NÀY ĐỂ ÉP AXIOS GỬI NGUYÊN KHỐI:
+                'Content-Length': file.buffer.length 
             }
         });
 
