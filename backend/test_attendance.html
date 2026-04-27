@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hệ thống Nhận diện Khuôn mặt IoT</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+      body {
+        background-color: #f4f7f6;
+        margin: 0;
+        padding: 20px;
+        color: #333;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .container {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      .card {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        flex: 1;
+        min-width: 300px;
+      }
+      h2 {
+        color: #2c3e50;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 10px;
+        margin-top: 0;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+      input[type="file"],
+      input[type="text"],
+      input[type="password"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        margin-top: 5px;
+      }
+      button {
+        background-color: #3498db;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        width: 100%;
+        transition: 0.3s;
+        margin-top: 10px;
+      }
+      button:hover {
+        background-color: #2980b9;
+      }
+      button:disabled {
+        background-color: #95a5a6;
+        cursor: not-allowed;
+      }
+      .btn-success {
+        background-color: #2ecc71;
+      }
+      .btn-success:hover {
+        background-color: #27ae60;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+      }
+      th,
+      td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+      }
+      th {
+        background-color: #3498db;
+        color: white;
+      }
+      #logArea {
+        background: #2c3e50;
+        color: #2ecc71;
+        padding: 10px;
+        border-radius: 5px;
+        height: 150px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      /* Giao diện trạng thái */
+      .status-PRESENT {
+        color: white;
+        background-color: #2ecc71;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+      }
+      .status-LATE {
+        color: white;
+        background-color: #f39c12;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+      }
+      .status-NULL {
+        color: white;
+        background-color: #95a5a6;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>🛠️ Bảng Điều Khiển Hệ Thống Chấm Công AI</h1>
+    </div>
+
+    <div class="container">
+      <div
+        class="card"
+        id="loginPanel"
+        style="background-color: #eaf2f8; border: 2px dashed #3498db"
+      >
+        <h2>0. Xác thực Admin</h2>
+        <div class="form-group">
+          <label>Email:</label>
+          <input type="text" id="loginEmail" value="admin@hcmut.edu.vn" />
+        </div>
+        <div class="form-group">
+          <label>Mật khẩu:</label>
+          <input type="password" id="loginPassword" value="123456" />
+        </div>
+        <button type="button" id="btnLogin" onclick="loginSystem()">
+          Đăng Nhập (Lấy Token)
+        </button>
+        <p
+          id="loginStatus"
+          style="
+            font-weight: bold;
+            margin-top: 10px;
+            text-align: center;
+            color: #e74c3c;
+          "
+        >
+          Chưa đăng nhập
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>1. Tạo Nhân Viên Nhanh</h2>
+        <p>Yêu cầu: Phải đăng nhập Admin trước.</p>
+        <div class="form-group">
+          <input
+            type="file"
+            id="newUsersPhotos"
+            accept="image/jpeg, image/png"
+            multiple
+          />
+        </div>
+        <button type="button" onclick="createMockUsers()">
+          Tạo Nhân Viên Mới
+        </button>
+        <div style="margin-top: 15px">
+          <p><strong>Log Hệ thống:</strong></p>
+          <div id="logArea">Hệ thống sẵn sàng...<br /></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2. Giả lập Camera (Quẹt thẻ)</h2>
+        <p>Không cần Token. Gửi trực tiếp luồng byte lên AI.</p>
+        <div class="form-group">
+          <input type="file" id="cameraPhoto" accept="image/jpeg, image/png" />
+        </div>
+        <button
+          type="button"
+          class="btn-success"
+          onclick="
+            this.disabled = true; 
+            simulateAttendance(event).finally(() => this.disabled = false);
+            return false;
+          "
+        >
+          📸 Chấm Công / Mở Cửa
+        </button>
+      </div>
+
+      <div class="card" style="flex: 2">
+        <h2>3. Bảng Công Hôm Nay</h2>
+        <button
+          type="button"
+          onclick="fetchTimesheets()"
+          style="width: auto; background-color: #8e44ad"
+        >
+          🔄 Làm mới bảng
+        </button>
+        <table>
+          <thead>
+            <tr>
+              <th>Tên Nhân Viên</th>
+              <th>Giờ Vào</th>
+              <th>Giờ Ra</th>
+              <th>Số Giờ</th>
+              <th>Trạng Thái</th>
+            </tr>
+          </thead>
+          <tbody id="timesheetBody"></tbody>
+        </table>
+      </div>
+      <div
+        class="card"
+        style="flex: 2; margin-top: 20px; border-top: 4px solid #2c3e50"
+      >
+        <h2>4. Nhật ký quét thẻ (Dữ liệu thô)</h2>
+        <button
+          type="button"
+          onclick="fetchLogs()"
+          style="width: auto; background-color: #2c3e50"
+        >
+          🔄 Làm mới Nhật ký
+        </button>
+        <table>
+          <thead>
+            <tr>
+              <th>Nhân Viên</th>
+              <th>Hành động</th>
+              <th>Thời gian thực tế</th>
+              <th>Ảnh Quẹt Thẻ</th> </tr>
+          </thead>
+          <tbody id="logTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      const API_BASE = "http://localhost:5001/v1/api";
+      let jwtToken = ""; // Biến lưu trữ Thẻ ra vào
+
+      function logMsg(msg) {
+        const logBox = document.getElementById("logArea");
+        logBox.innerHTML += `> ${msg}<br>`;
+        logBox.scrollTop = logBox.scrollHeight;
+      }
+
+      // ==========================================
+      // 0. ĐĂNG NHẬP LẤY TOKEN
+      // ==========================================
+      async function loginSystem() {
+        const email = document.getElementById("loginEmail").value;
+        const password = document.getElementById("loginPassword").value;
+        const statusText = document.getElementById("loginStatus");
+
+        try {
+          const res = await fetch(`${API_BASE}/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          const data = await res.json();
+
+          // Kiểm tra EC = 0 là thành công
+          if (data && data.EC === 0) {
+            jwtToken = data.access_token;
+            statusText.innerText = "✅ Đăng nhập thành công!";
+            statusText.style.color = "#2ecc71";
+            document.getElementById("btnLogin").disabled = true;
+            logMsg("Đã nhận Token Admin. Bạn có thể tạo nhân viên.");
+          } else {
+            // Hiển thị thông báo lỗi EM từ Server trả về
+            statusText.innerText = `❌ ${data.EM || "Lỗi không xác định"}`;
+            statusText.style.color = "#e74c3c";
+          }
+        } catch (err) {
+          statusText.innerText = `❌ Lỗi kết nối server`;
+        }
+      }
+
+      // ==========================================
+      // 1. TẠO NHÂN VIÊN MỚI (CÓ KÈM TOKEN)
+      // ==========================================
+      async function createMockUsers() {
+        if (!jwtToken) {
+          return alert(
+            "⛔ Bạn phải nhấn Đăng Nhập Admin trước khi tạo nhân viên!",
+          );
+        }
+
+        const files = document.getElementById("newUsersPhotos").files;
+        if (files.length === 0) return alert("Vui lòng chọn ít nhất 1 ảnh!");
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const mockName = "Nhân viên " + Math.floor(Math.random() * 1000);
+          const mockEmail = `nv${Date.now() + i}@hcmut.edu.vn`;
+
+          const formData = new FormData();
+          formData.append("full_name", mockName);
+          formData.append("email", mockEmail);
+          formData.append("password", "123456");
+          formData.append("role", "EMPLOYEE");
+          formData.append("photo", file);
+
+          try {
+            logMsg(`Đang tạo ${mockName}...`);
+            const res = await fetch(`${API_BASE}/users/enroll`, {
+              method: "POST",
+              headers: {
+                // NHÉT TOKEN VÀO HEADER ĐỂ QUA CỬA CHECKROLE
+                Authorization: `Bearer ${jwtToken}`,
+              },
+              body: formData,
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+              logMsg(
+                `✅ Thành công: ${data.message || "Tạo người dùng thành công!"}`,
+              );
+            } else {
+              const errMsg = data.error || data.message || JSON.stringify(data);
+              logMsg(`❌ Lỗi: ${errMsg}`);
+            }
+          } catch (err) {
+            logMsg(`❌ Lỗi mạng: ${err.message}`);
+          }
+        }
+        fetchTimesheets();
+      }
+
+      // ==========================================
+      // 2. GIẢ LẬP CAMERA (KHÔNG CẦN TOKEN)
+      // ==========================================
+      async function simulateAttendance(event) {
+        if (event) event.preventDefault(); // Chống Live Server/Form reload
+
+        const fileInput = document.getElementById("cameraPhoto");
+        if (fileInput.files.length === 0) return alert("Vui lòng chọn ảnh!");
+
+        const file = fileInput.files[0];
+        const arrayBuffer = await file.arrayBuffer();
+
+        try {
+          logMsg(`Đang quét khuôn mặt bằng AI (${file.size} bytes)...`);
+
+          const res = await fetch(`${API_BASE}/attendance`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/octet-stream",
+              "Content-Length": file.size.toString(),
+            },
+            body: arrayBuffer,
+          });
+
+          const data = await res.json();
+
+          if (res.ok) {
+            logMsg(`✅ 🔓 MỞ CỬA: ${data.message || "Nhận diện thành công!"}`);
+            fetchTimesheets();
+            fetchLogs();
+          } else {
+            const errMsg = data.error || data.message || "Không xác định";
+            logMsg(`❌ 🔒 TỪ CHỐI: ${errMsg}`);
+          }
+        } catch (err) {
+          logMsg(`❌ Lỗi kết nối: ${err.message}`);
+        }
+        return false;
+      }
+
+      // ==========================================
+      // 3. LẤY DỮ LIỆU BẢNG CÔNG
+      // ==========================================
+      async function fetchTimesheets() {
+        try {
+          // Route này hiện đang public, không cần token
+          const res = await fetch(`${API_BASE}/timesheets`);
+          if (!res.ok) return;
+
+          const users = await res.json();
+          const tbody = document.getElementById("timesheetBody");
+          tbody.innerHTML = "";
+
+          if (users.length === 0) {
+            tbody.innerHTML =
+              '<tr><td colspan="5" style="text-align:center;">Chưa có dữ liệu chấm công.</td></tr>';
+            return;
+          }
+
+          users.forEach((u) => {
+            const statusClass = u.status ? `status-${u.status}` : "status-NULL";
+            const statusText = u.status || "Chưa chấm công";
+            const timeIn = u.check_in || "--:--:--";
+            const timeOut = u.check_out || "--:--:--";
+            const hours = u.working_hours
+              ? parseFloat(u.working_hours).toFixed(2)
+              : "0";
+
+            tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${u.full_name}</strong></td>
+                            <td>${timeIn}</td>
+                            <td>${timeOut}</td>
+                            <td>${hours} h</td>
+                            <td><span class="${statusClass}">${statusText}</span></td>
+                        </tr>
+                    `;
+          });
+        } catch (err) {
+          console.error("Lỗi lấy bảng công:", err);
+        }
+      }
+
+      window.onload = fetchTimesheets;
+
+      async function fetchLogs() {
+        try {
+          const res = await fetch(`${API_BASE}/attendance/logs`);
+          if (!res.ok) return;
+          const logs = await res.json();
+          const tbody = document.getElementById("logTableBody");
+          tbody.innerHTML = "";
+
+          // Lấy gốc URL của server (ví dụ: cắt "http://localhost:5001" từ API_BASE)
+          const serverBase = API_BASE.split('/v1/api')[0]; 
+
+          logs.forEach((l) => {
+            const time = new Date(l.event_time).toLocaleString("vi-VN");
+            
+            // Sửa lại màu hiển thị: CHECK_IN màu xanh, CHECK_OUT màu xám
+            const badge = l.event_type === "CHECK_IN" ? "status-PRESENT" : "status-NULL";
+            
+            // XỬ LÝ HIỂN THỊ ẢNH
+            let imgHtml = '<span style="color: #999; font-size: 12px; font-style: italic;">Không có ảnh</span>';
+            
+            if (l.imgurl) {
+                // Kiểm tra xem là link Cloud hay link Local
+                const fullImgUrl = l.imgurl.startsWith('http') ? l.imgurl : `${serverBase}${l.imgurl}`;
+                
+                // Hiển thị ảnh dạng Thumbnail, click vào để mở to
+                imgHtml = `
+                    <a href="${fullImgUrl}" target="_blank">
+                        <img src="${fullImgUrl}" 
+                             alt="Ảnh quẹt thẻ" 
+                             style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px; border: 1px solid #ccc; transition: transform 0.2s;"
+                             onmouseover="this.style.transform='scale(1.5)'"
+                             onmouseout="this.style.transform='scale(1)'">
+                    </a>
+                `;
+            }
+
+            // Đổ dữ liệu ra dòng mới trong bảng
+            tbody.innerHTML += `
+              <tr>
+                <td><strong>${l.full_name}</strong></td>
+                <td><span class="${badge}">${l.event_type}</span></td>
+                <td>${time}</td>
+                <td>${imgHtml}</td> </tr>
+            `;
+          });
+        } catch (err) {
+          console.error("Lỗi lấy log:", err);
+        }
+      }
+      window.onload = () => {
+        fetchTimesheets();
+        fetchLogs();
+      };
+    </script>
+  </body>
+</html>
