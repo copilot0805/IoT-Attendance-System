@@ -40,6 +40,10 @@ Bảng users: Lưu thông tin cơ bản, email, mật khẩu (đã hash) và vai
 
 Bảng face_vectors: Lưu trữ vector 512 chiều của mỗi user. Đây là cột quan trọng nhất để đối chiếu khuôn mặt.
 
-Bảng attendance_events: Lưu trữ lịch sử check in/out. Ghi nhận là check-out nếu sự kiện gần nhất trong ngày là check-in và ngược lại, mặc định lần đầu luôn là check-in. Đã thiết lập khoảng cách giữa các lần chấm công là 5 giây để tránh race condition. Ảnh có thể lưu local hoặc trên cloud(Cloudinary), cần thay biến SAVE_TO_CLOUD trong .env để chuyển chỗ lưu.
+Bảng shifts: Lưu thông tin cấu hình các ca làm việc, bao gồm thời gian bắt đầu và thời gian kết thúc của mỗi ca.
 
-Bảng daily_timesheets: Lưu trữ dữ liệu chấm công tổng hợp theo ngày, trong đó giờ vào là lần check-in đầu tiên trong ngày, và giờ ra được cập nhật là thời gian của lần check-out cuối cùng trong ngày. Hệ thống tự động tính tổng số giờ làm việc thực tế bằng cách ghép cặp các lần check-in và check-out liền kề, tự động xác định trạng thái đi trễ (LATE) dựa trên thời gian cấu hình trong .env (CHECKIN_TIME), và tự động đánh dấu vắng mặt (ABSENT) qua cron job vào lúc 23:59 mỗi ngày đối với các nhân viên không có bản ghi nào.
+Bảng user_shifts: Bảng trung gian phân công lịch làm việc, chia nhân viên vào các ca cụ thể theo từng ngày làm việc (working_date).
+
+Bảng attendance_events: Lưu trữ lịch sử check in/out. Ghi nhận là check-out nếu sự kiện gần nhất trong ca làm việc hiện tại là check-in và ngược lại, mặc định lần đầu luôn là check-in. Đã thiết lập trigger khóa 5 giây ở database để tránh race condition. Ảnh được lưu ở trên Cloudinary.
+
+Bảng shift_timesheets: Lưu trữ dữ liệu chấm công tổng hợp theo từng ca làm việc của nhân viên. Giờ vào là lần check-in đầu tiên và giờ ra được cập nhật là lần check-out cuối cùng trong ca. Hệ thống tự động tính tổng số giờ làm việc thực tế bằng cách ghép cặp các lần check-in/out, tự động xác định trạng thái đi trễ (LATE), làm thiếu giờ (INCOMPLETE) dựa trên giờ cấu hình của bảng shifts, và tự động đánh dấu vắng mặt (ABSENT) qua cron job đối với các ca làm việc đã kết thúc thời gian khá lâu mà nhân viên không có bản ghi nào.

@@ -11,10 +11,6 @@ require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5001;
 
-// Cho phép truy cập ảnh qua URL: http://localhost:5001/uploads/ten_file.jpg
-const path = require('path');
-app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
-
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

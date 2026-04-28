@@ -1,54 +1,8 @@
 const axios = require("axios");
 const pool = require("../db");
 
-const fs = require('fs');
-const path = require('path');
-const cloudinary = require('cloudinary').v2;
-const streamifier = require('streamifier');
-const { upsertDailyTimesheet} = require("../services/attendanceService");
-
-// Cấu hình Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-// Hàm bổ trợ: Đẩy ảnh lên Cloudinary
-const uploadToCloudinary = (buffer) => {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: "attendance_logs" },
-      (error, result) => {
-        if (result) resolve(result.secure_url);
-        else reject(error);
-      }
-    );
-    streamifier.createReadStream(buffer).pipe(stream);
-  });
-};
-
-// Hàm bổ trợ: Lưu ảnh cục bộ
-const saveToLocal = (buffer, userId) => {
-  const fileName = `cam_${userId}_${Date.now()}.jpg`;
-  
-  // ĐÚNG: Lùi ra 2 cấp (từ src/controllers -> src -> root) rồi mới vào public
-  const dirPath = path.join(__dirname, '../../public/uploads');
-  const filePath = path.join(dirPath, fileName);
-  
-  // BẢO VỆ SERVER: Nếu thư mục chưa tồn tại thì tự động tạo mới
-  if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
-  }
-
-  fs.writeFileSync(filePath, buffer);
-  return `/uploads/${fileName}`; 
-};
-// Set up cho việc ghi log trong hệ thống
-// const FALLBACK_LOG_PATH = path.join(
-//   __dirname,
-//   "../../logs/attendance_fallback.log",
-// );
-
+const { upsertShiftTimesheet, findUserActiveShift, determineNextEvent} = require("../services/attendanceService");
+const {uploadToCloudinary} = require("../services/uploadFile")
 
 // const postAttendanceAPI = async (req, res) => {
 //     try {
@@ -152,71 +106,35 @@ const postAttendanceAPI = async (req, res) => {
     // =====================================================================
     // BƯỚC 3: QUYẾT ĐỊNH MỞ CỬA & GHI LOG
     // =====================================================================
-    if (bestMatch && bestMatch.distance <= THRESHOLD) {
-      console.log(
-        `✅ [DB MATCH] Nhận diện: ${bestMatch.full_name} (Độ lệch: ${bestMatch.distance.toFixed(4)})`,
+      if (bestMatch && bestMatch.distance <= THRESHOLD) {
+        console.log(
+          `✅ [DB MATCH] Nhận diện: ${bestMatch.full_name} (Độ lệch: ${bestMatch.distance.toFixed(4)})`,
       );
 
-      // Logging
-      // 1. Ghi log vào file text dự phòng (Luôn ghi để backup)
-      // const logEntry = `${new Date().toISOString()} | ID: ${bestMatch.user_id} | Name: ${bestMatch.full_name} | Dist: ${bestMatch.distance.toFixed(4)}\n`;
-      // fs.appendFile(FALLBACK_LOG_PATH, logEntry, (err) => {
-      //   if (err) console.error("❌ Lỗi ghi file log dự phòng:", err);
-      // });
+      // Kiểm tra xem có gần thời gian ca làm việc không
+      const shiftData = await findUserActiveShift(bestMatch.user_id);
+      if (!shiftData) return res.status(403).json({ error: "Ngoài giờ làm việc" });
 
-      // 2. Logic luân phiên Check-in / Check-out
-      // Tìm bản ghi quẹt thẻ gần nhất CỦA NGÀY HÔM NAY của user này
-      const checkStatusQuery = `
-        SELECT event_type 
-        FROM attendance_events 
-        WHERE user_id = $1 AND DATE(event_time) = CURRENT_DATE 
-        ORDER BY event_time DESC 
-        LIMIT 1;
-      `;
+      // Xác định là check in hay check out
+      const { activeShift, validStart, validEnd } = shiftData;
+      const nextEvent = await determineNextEvent(bestMatch.user_id, validStart, validEnd);
 
-      const statusResult = await pool.query(checkStatusQuery, [
-        bestMatch.user_id,
-      ]);
+      let eventId; // Biến lưu ID của sự kiện để cập nhật ảnh sau
 
-      let nextEvent = "CHECK_IN"; // Mặc định nếu hôm nay chưa quẹt thì là vào ca
-
-      if (statusResult.rows.length > 0) {
-        const lastEvent = statusResult.rows[0].event_type;
-        // Nếu lần quẹt gần nhất là CHECK_IN, thì lần này đảo thành CHECK_OUT
-        if (lastEvent === "CHECK_IN") {
-          nextEvent = "CHECK_OUT";
-        }
-      }
-
-      // =====================================================================
-      // LOGIC LƯU ẢNH DỰA TRÊN BIẾN TOGGLE TRONG ENV
-      // =====================================================================
-      let imgUrl = null;
-      const useCloud = process.env.SAVE_TO_CLOUD === 'true';
-
+      // Ghi trạng thái mới vào Database
+      const logQuery = `INSERT INTO attendance_events (user_id, event_type, image_url) VALUES ($1, $2, NULL) RETURNING event_id`;
       try {
-        if (useCloud) {
-          console.log("☁️ Đang lưu ảnh lên Cloudinary...");
-          imgUrl = await uploadToCloudinary(imageBuffer);
-        } else {
-          console.log("📂 Đang lưu ảnh cục bộ vào thư mục public/uploads...");
-          imgUrl = saveToLocal(imageBuffer, bestMatch.user_id);
-        }
-      } catch (saveErr) {
-        console.error("❌ Lỗi khi lưu trữ hình ảnh:", saveErr.message);
-      }
+        const logResult = await pool.query(logQuery, [bestMatch.user_id, nextEvent]);
+        eventId = logResult.rows[0].event_id;
 
-      // 3. Ghi trạng thái mới vào Database
-      const logQuery = `INSERT INTO attendance_events (user_id, event_type, image_url) VALUES ($1, $2, $3)`;
-      try {
-        await pool.query(logQuery, [bestMatch.user_id, nextEvent, imgUrl]);
-        await upsertDailyTimesheet(bestMatch.user_id,bestMatch.full_name);
-        console.log(
-          `📝 [DB LOG] Đã lưu lịch sử: [${nextEvent}] cho ${bestMatch.full_name}`,
-        );
+        // Tính toán và chốt dữ liệu chấm công của một ca làm việc vào bảng shift_timesheets.
+        const { shift_id, working_date } = activeShift;
+        await upsertShiftTimesheet(bestMatch.user_id, shift_id, working_date, bestMatch.full_name);
+
+        console.log(`📝 [DB LOG] Đã lưu lịch sử: [${nextEvent}] cho ${bestMatch.full_name}`,);
       } catch (err) {
         console.error("❌ [DB LOG ERROR] Lỗi ghi log database:", err.message);
-        
+
         // KIỂM TRA LỖI TRIGGER
         if (err.code === 'P0001' || err.message.includes('5 seconds') || err.message.includes('5 giây')) {
             return res.status(429).json({ error: "Thao tác quá nhanh! Vui lòng đợi 5 giây rồi quẹt lại." });
@@ -225,6 +143,16 @@ const postAttendanceAPI = async (req, res) => {
         // Nếu là lỗi DB khác thì báo lỗi server
         return res.status(500).json({ error: "Lỗi hệ thống khi lưu nhật ký." });
       }
+
+      // CHẠY NGẦM CLOUDINARY
+      uploadToCloudinary(imageBuffer)
+        .then(async (imgUrl) => {
+            await pool.query(`UPDATE attendance_events SET image_url = $1 WHERE event_id = $2`, [imgUrl, eventId]);
+            console.log(`☁️ [CLOUDINARY] Đã lưu ảnh thành công cho ${bestMatch.full_name}`);
+        })
+        .catch((err) => {
+            console.error("❌ [CLOUDINARY ERROR] Lỗi upload ngầm:", err.message);
+        });
 
       return res.status(200).json({
         message: "Nhận diện thành công, đang mở cửa!",
@@ -239,17 +167,6 @@ const postAttendanceAPI = async (req, res) => {
     } else {
       const currentDist = bestMatch ? bestMatch.distance.toFixed(4) : "N/A";
       console.log(`❌ [DB MATCH] Người lạ! (Độ lệch gần nhất: ${currentDist})`);
-
-      const errorLogEntry = `${new Date().toISOString()} | [DENIED] | Dist: ${currentDist} | ImageSize: ${imageBuffer.length} bytes\n`;
-
-      //logginf lần thất bại
-      // fs.appendFile(FALLBACK_LOG_PATH, errorLogEntry, (err) => {
-      //   if (err) console.error("❌ Lỗi ghi file log hệ thống:", err);
-      //   else
-      //     console.log(
-      //       "📝 [SYSTEM LOG] Đã ghi lại nỗ lực truy cập thất bại vào file.",
-      //     );
-      // });
 
       return res.status(403).json({
         message: "Nhận diện thất bại: Người lạ!",
@@ -267,29 +184,29 @@ const postAttendanceAPI = async (req, res) => {
   }
 };
 
-// Hàm lấy danh sách chấm công hôm nay cho trang Web
 const getTimesheetsAPI = async (req, res) => {
   try {
-    // Câu lệnh SQL lấy tên User và thông tin công ngày hôm nay (CURRENT_DATE)
     const query = `
       SELECT u.user_id, u.full_name, 
-             dt.status, 
-             dt.working_hours,
-             TO_CHAR(dt.first_check_in, 'HH24:MI:SS') as check_in,
-             TO_CHAR(dt.last_check_out, 'HH24:MI:SS') as check_out
+             s.start_time, s.end_time,
+             COALESCE(st.status, 'PENDING') as status, 
+             COALESCE(st.working_hour, 0) as working_hours,
+             TO_CHAR(st.first_check_in, 'HH24:MI:SS') as check_in,
+             TO_CHAR(st.last_check_out, 'HH24:MI:SS') as check_out
       FROM users u
-      LEFT JOIN daily_timesheets dt ON u.user_id = dt.user_id AND dt.work_date = CURRENT_DATE;
+      JOIN user_shifts us ON u.user_id = us.user_id AND us.working_date = CURRENT_DATE
+      JOIN shifts s ON us.shift_id = s.shift_id
+      LEFT JOIN shift_timesheets st 
+             ON u.user_id = st.user_id 
+            AND st.shift_id = us.shift_id 
+            AND st.working_date = us.working_date;
     `;
 
     const result = await pool.query(query);
-
-    // Gửi danh sách này về cho trang Web
     return res.status(200).json(result.rows);
   } catch (error) {
-    console.error("Lỗi lấy bảng công:", error.message);
-    return res
-      .status(500)
-      .json({ error: "Lỗi hệ thống không lấy được bảng công" });
+    console.error("❌ Lỗi lấy bảng công:", error.message);
+    return res.status(500).json({ error: "Lỗi hệ thống không lấy được bảng công" });
   }
 };
 

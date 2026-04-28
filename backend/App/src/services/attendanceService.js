@@ -1,85 +1,194 @@
 const pool = require("../db");
+const axios = require("axios");
 
-const upsertDailyTimesheet = async (userId,name) => {
-  const checkInLimit = process.env.CHECKIN_TIME || '08:15:00';
-  const query = `
-    -- 1. CTE tạo bảng tạm: Ghép cặp mỗi dòng sự kiện với sự kiện quẹt thẻ liền kề tiếp theo của nó
-    WITH ordered_events AS (
-        SELECT 
-            user_id,
-            event_time,
-            event_type,
-            -- Hàm LEAD giúp lấy event_time và event_type của dòng tiếp theo
-            LEAD(event_time) OVER (PARTITION BY user_id ORDER BY event_time) as next_time,
-            LEAD(event_type) OVER (PARTITION BY user_id ORDER BY event_time) as next_type
-        FROM attendance_events
-        WHERE user_id = $1 AND DATE(event_time) = CURRENT_DATE
-    ),
+// Tìm ca làm việc của ngày hôm nay HOẶC hôm qua (ca đêm)
+const findUserActiveShift = async (userId) => {
+    const now = new Date();
+    const query = `
+        SELECT s.shift_id, s.start_time, s.end_time, us.working_date
+        FROM user_shifts us
+        JOIN shifts s ON us.shift_id = s.shift_id
+        WHERE us.user_id = $1 
+          AND us.working_date >= CURRENT_DATE - INTERVAL '1 day'
+          AND us.working_date <= CURRENT_DATE
+        ORDER BY us.working_date DESC`;
+
+    const result = await pool.query(query, [userId]);
     
-    -- 2. CTE tính tổng giờ: Chỉ lấy những cặp thỏa mãn điều kiện CHECK_IN và kế tiếp là CHECK_OUT
-    calculated_hours AS (
-        SELECT 
-            user_id,
-            SUM(EXTRACT(EPOCH FROM (next_time - event_time)) / 3600) as real_working_hours
-        FROM ordered_events
-        WHERE event_type = 'CHECK_IN' AND next_type = 'CHECK_OUT'
-        GROUP BY user_id
-    )
+    for (const row of result.rows) {
+        const { start_time, end_time, working_date } = row;
+        const d = new Date(working_date);
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+        let sStart = new Date(`${dateStr}T${start_time}`);
+        let sEnd = new Date(`${dateStr}T${end_time}`);
+
+        if (sEnd < sStart) sEnd.setDate(sEnd.getDate() + 1);
+
+        // buffer để đảm bảo check in và check out đúng ca
+        const check_in_buffer = 1
+        const check_out_buffer = 2
+        const validStart = new Date(sStart.getTime() - (check_in_buffer * 60 * 60 * 1000));
+        const validEnd = new Date(sEnd.getTime() + (check_out_buffer * 60 * 60 * 1000));
+
+        if (now >= validStart && now <= validEnd) {
+            return { activeShift: row, shiftStartFull: sStart, shiftEndFull: sEnd,validStart, validEnd };
+        }
+    }
+    return null;
+};
+
+/**
+ * 2. Quyết định hành động tiếp theo (CHECK_IN hay CHECK_OUT)
+ */
+const determineNextEvent = async (userId, validStart, validEnd) => {
+    // Dùng đúng khung giờ buffer (-1h đến +2h) đã bao gồm ngày tháng chính xác
+    const query = `
+        SELECT event_type, event_time FROM attendance_events 
+        WHERE user_id = $1 
+          AND event_time >= $2 AND event_time <= $3
+        ORDER BY event_time DESC LIMIT 1;`;
+
+    const res = await pool.query(query, [userId, validStart, validEnd]);
+
+    // Chưa có log trong ca này thì là CHECK_IN
+    if (res.rows.length === 0) return "CHECK_IN";
+
+    const lastEvent = res.rows[0];
     
-    -- 3. Cập nhật vào bảng daily_timesheets
-    INSERT INTO daily_timesheets (user_id, work_date, first_check_in, last_check_out, working_hours, status)
-    SELECT 
-        e.user_id, 
-        CURRENT_DATE, 
-        
-        -- Lấy giờ vào làm đầu tiên
-        MIN(e.event_time), 
-        
-        -- Lấy giờ tan làm cuối cùng (Chỉ lấy khi hành động là CHECK_OUT)
-        MAX(CASE WHEN e.event_type = 'CHECK_OUT' THEN e.event_time ELSE NULL END),
-        
-        -- Lấy tổng giờ đã tính ở bước 2
-        COALESCE((SELECT real_working_hours FROM calculated_hours), 0),
-        
-        -- Xét trạng thái LATE dựa vào lần quẹt thẻ đầu ngày
-        CASE 
-            WHEN MIN(e.event_time) IS NULL THEN 'ABSENT'
-            WHEN MIN(e.event_time)::time > $2::time THEN 'LATE' 
-            ELSE 'PRESENT'
-        END
-    FROM attendance_events e
-    WHERE e.user_id = $1 AND DATE(e.event_time) = CURRENT_DATE
-    GROUP BY e.user_id
-    ON CONFLICT (user_id, work_date) 
-    DO UPDATE SET 
-        first_check_in = EXCLUDED.first_check_in,
-        last_check_out = EXCLUDED.last_check_out,
-        -- Cập nhật giờ làm thực tế
-        working_hours = EXCLUDED.working_hours,
-        status = EXCLUDED.status;
-  `;
+    // Cooldown 10 phút. 
+    // Nếu quẹt quá gần nhau, quăng lỗi để chặn luôn việc tạo cặp IN/OUT sai lệch.
+    // const lastEventTime = new Date(lastEvent.event_time);
+    // const dbTimeRes = await pool.query("SELECT CURRENT_TIMESTAMP AS now");
+    // const now = new Date(dbTimeRes.rows[0].now);
+    // const diffMinutes = (now - lastEventTime) / (1000 * 60);
+    // if (diffMinutes < 10) {
+    //     throw new Error("COOLDOWN_10_MINS"); 
+    // }
+
+    return lastEvent.event_type === "CHECK_IN" ? "CHECK_OUT" : "CHECK_IN";
+};
+
+// Cập nhật bảng công theo Ca làm việc
+const upsertShiftTimesheet = async (userId, shiftId, workingDate, name) => {
   try {
-    await pool.query(query, [userId, checkInLimit]);
-    console.log(`📊 [SERVICE] Đã cập nhật Timesheet cho ${name}`);
+    // Lấy thông tin ca để xác định khung giờ
+    const shiftRes = await pool.query(
+      `SELECT start_time, end_time FROM shifts WHERE shift_id = $1`, 
+      [shiftId]
+    );
+    const { start_time, end_time } = shiftRes.rows[0];
+
+    const d = new Date(workingDate);
+    const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    let startTimeFull = new Date(`${dateString}T${start_time}`);
+    let endTimeFull = new Date(`${dateString}T${end_time}`);
+
+    // Xử lý ca đêm
+    if (endTimeFull < startTimeFull) {
+      endTimeFull.setDate(endTimeFull.getDate() + 1); 
+    }
+
+    const searchStart = new Date(startTimeFull.getTime() - (1 * 60 * 60 * 1000));
+    const searchEnd = new Date(endTimeFull.getTime() + (2 * 60 * 60 * 1000));
+
+    const eventsRes = await pool.query(`
+        SELECT event_type, event_time
+        FROM attendance_events
+        WHERE user_id = $1 
+          AND event_time >= $2 
+          AND event_time <= $3
+        ORDER BY event_time ASC
+    `, [userId, searchStart, searchEnd]);
+
+    // VÒNG LẶP BẮT CẶP IN/OUT ĐỂ TÍNH GIỜ THỰC TẾ
+    let first_in = null;
+    let last_out = null;
+    let totalMs = 0;
+    let current_in_time = null; 
+
+    eventsRes.rows.forEach(event => {
+      const eventTime = new Date(event.event_time);
+
+      if (event.event_type === 'CHECK_IN') {
+        if (!first_in) first_in = eventTime; 
+        if (!current_in_time) current_in_time = eventTime; 
+      } 
+      else if (event.event_type === 'CHECK_OUT') {
+        last_out = eventTime; 
+        
+        if (current_in_time) {
+          totalMs += (eventTime - current_in_time);
+          current_in_time = null; 
+        }
+      }
+    });
+
+    const workingHour = (totalMs / (1000 * 60 * 60)).toFixed(2);
+
+    let status = 'PRESENT';
+    const now = new Date();
+
+    if (!first_in && !last_out) {
+      status = 'ABSENT';
+    } 
+    // Nếu vẫn còn trong giờ ca làm và đang ở trạng thái đã IN, thì báo WORKING
+    else if (now < searchEnd && current_in_time !== null) {
+      status = 'WORKING'; 
+    } 
+    else if (!first_in || !last_out || current_in_time !== null) {
+      status = 'INCOMPLETE';
+    } 
+    else if (first_in > startTimeFull) {
+      status = 'LATE';
+    }
+
+    await pool.query(`
+        INSERT INTO shift_timesheets 
+        (user_id, shift_id, working_date, first_check_in, last_check_out, working_hour, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (user_id, shift_id, working_date) 
+        DO UPDATE SET 
+            first_check_in = EXCLUDED.first_check_in,
+            last_check_out = EXCLUDED.last_check_out,
+            working_hour = EXCLUDED.working_hour,
+            status = EXCLUDED.status;
+    `, [userId, shiftId, workingDate, first_in, last_out, workingHour, status]);
+
+    console.log(`📊 [SERVICE] Chốt công ${name} | Hrs: ${workingHour} | Status: ${status}`);
+
   } catch (err) {
     console.error("❌ [SERVICE ERROR]:", err.message);
   }
 };
 
+// Hàm Cron Job đánh vắng mặt
 const markAbsentForToday = async () => {
   const query = `
-    INSERT INTO daily_timesheets (user_id, work_date, status)
-    SELECT u.user_id, CURRENT_DATE, 'ABSENT' FROM users u
-    LEFT JOIN daily_timesheets dt ON u.user_id = dt.user_id AND dt.work_date = CURRENT_DATE
-    WHERE dt.timesheet_id IS NULL
-    ON CONFLICT (user_id, work_date) DO NOTHING;
+    INSERT INTO shift_timesheets (user_id, shift_id, working_date, status)
+    SELECT us.user_id, us.shift_id, us.working_date, 'ABSENT' 
+    FROM user_shifts us
+    JOIN shifts s ON us.shift_id = s.shift_id
+    LEFT JOIN shift_timesheets st 
+      ON us.user_id = st.user_id 
+      AND us.shift_id = st.shift_id 
+      AND us.working_date = st.working_date
+    WHERE 
+      (
+        CASE 
+          WHEN s.end_time > s.start_time THEN (us.working_date + s.end_time + interval '2 hours')
+          ELSE (us.working_date + interval '1 day' + s.end_time + interval '2 hours')
+        END
+      ) < NOW()
+      AND st.timesheet_id IS NULL;
   `;
   try {
     const res = await pool.query(query);
-    console.log(`🌙 [CRON] Đã chốt vắng mặt cho ${res.rowCount} người.`);
+    console.log(`🌙 [CRON] Đã chốt vắng mặt cho ${res.rowCount} ca đã kết thúc.`);
   } catch (err) {
     console.error("❌ [CRON ERROR]:", err.message);
   }
 };
 
-module.exports = { upsertDailyTimesheet, markAbsentForToday };
+module.exports = { upsertShiftTimesheet, markAbsentForToday, findUserActiveShift, determineNextEvent };
