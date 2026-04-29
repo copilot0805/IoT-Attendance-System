@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-enum SystemState { STATE_IDLE, STATE_MATCH_FOUND, STATE_MATCH_FAILED, STATE_ERROR, STATE_SETUP };
+enum SystemState { STATE_IDLE, STATE_MATCH_FOUND, STATE_ERROR, STATE_SETUP };
 
 extern volatile SystemState currentState;
 extern String currentUserName;

@@ -8,7 +8,6 @@
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-
 void initLCD() {
     Wire.begin(I2C_SDA, I2C_SCL);
     lcd.init();
@@ -18,10 +17,10 @@ void initLCD() {
 }
 
 void TaskLCD(void *pvParameters) {
-    SystemState lastState = (SystemState)-1; // Kích hoạt vẽ lần đầu
+    SystemState lastState = (SystemState)-1; // Kich hoat ve lan dau
 
     for (;;) {
-        // Chỉ xóa và vẽ lại khi trạng thái thay đổi (Chống nhấp nháy/treo)
+        // Chi xoa va ve lai khi trang thai thay doi (Chong nhap nhay/treo)
         if (currentState != lastState) {
             lcd.clear();
             lastState = currentState;
@@ -40,24 +39,17 @@ void TaskLCD(void *pvParameters) {
                     lcd.setCursor(0, 1); lcd.print(sysMsg);
                     break;
                 case STATE_MATCH_FOUND:
-                case STATE_MATCH_FAILED:
-                    break; // Sẽ xử lý ở khối dưới
+                    break; // Se xu ly o khoi duoi
             }
         }
 
-        // Xử lý các trạng thái hiển thị tạm thời (3 giây)
+        // Xu ly trang thai hien thi tam thoi (3 giay) mo cua
         if (currentState == STATE_MATCH_FOUND) {
-            lcd.setCursor(0, 0); lcd.print("ID: " + currentUserID + "        "); // Khoảng trắng để đè chữ cũ
+            lcd.setCursor(0, 0); lcd.print("ID: " + currentUserID + "        "); 
             lcd.setCursor(0, 1); lcd.print("In: " + getFormattedTime() + "        ");
             vTaskDelay(3000 / portTICK_PERIOD_MS);
             currentState = STATE_IDLE; 
         } 
-        else if (currentState == STATE_MATCH_FAILED) {
-            lcd.setCursor(0, 0); lcd.print("UNRECOGNIZED!   ");
-            lcd.setCursor(0, 1); lcd.print("Please try again");
-            vTaskDelay(2000 / portTICK_PERIOD_MS);
-            currentState = STATE_IDLE;
-        }
 
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }

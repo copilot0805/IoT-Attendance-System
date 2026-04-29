@@ -102,7 +102,7 @@ void TaskCameraAI(void *pvParameters) {
                                 currentState = STATE_MATCH_FOUND; 
                             } 
                         }
-                        // Tuyet doi KHONG goi http.end() o day de lan sau gui anh nhanh (400ms)
+                        // KHONG goi http.end() o day de lan sau gui anh nhanh (400ms)
                     } else {
                         // --- SAD PATH: Server sap hoac cup may ---
                         Serial.printf("[HTTP] Loi POST. Ma loi: %d\n", res);

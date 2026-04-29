@@ -52,7 +52,7 @@ void loop() {
     if (isConfigMode) {
         handleConfigServer(); 
         
-        // Thêm log định kỳ để chứng minh vòng loop vẫn đang sống nhăn răng
+        // Thêm log định kỳ để chứng minh vòng loop vẫn đang sống và chờ đợi cấu hình từ người dùng
         static unsigned long lastLog = 0;
         if (millis() - lastLog > 5000) {
             Serial.println("[INFO] Hãy kết nối WiFi 'BKU_SETUP' và truy cập 192.168.4.1");

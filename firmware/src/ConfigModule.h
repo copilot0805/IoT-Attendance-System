@@ -25,7 +25,6 @@ void handleSaveConfig() {
     if(configServer.hasArg("url")) pref.putString("url", configServer.arg("url"));
     pref.end();
 
-    // String html = "<html><body style='text-align:center; padding:50px; font-family:Arial;'>";
     String html = "<html><head><meta charset='UTF-8'></head><body style='text-align:center; padding:50px; font-family:Arial;'>";
     html += "<h2>Da luu cau hinh!</h2><p>Hệ thống đang khởi động lại...</p></body></html>";
     configServer.send(200, "text/html", html);
@@ -63,7 +62,7 @@ void initNetworkConfig() {
         if(WiFi.status() == WL_CONNECTED) wifiConnected = true;
     }
 
-    // --- SỬA ĐOẠN NÀY ĐỂ BÁO LỖI LÊN LCD ---
+    // --- BÁO LỖI LÊN LCD ---
     if (!wifiConnected || serverUrl == "") {
         isConfigMode = true;
         currentState = STATE_SETUP; // Kích hoạt trạng thái Setup
