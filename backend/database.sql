@@ -1,16 +1,16 @@
 -- Kích hoạt extension pgvector (Bắt buộc cho nhận diện khuôn mặt)
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Dọn dẹp các bảng và trigger cũ (nếu có) để tránh lỗi khi chạy lại file
-DROP TRIGGER IF EXISTS trigger_prevent_spam_attendance ON attendance_events;
-DROP FUNCTION IF EXISTS check_spam_attendance();
-DROP TABLE IF EXISTS shift_timesheets CASCADE;
-DROP TABLE IF EXISTS attendance_events CASCADE;
-DROP TABLE IF EXISTS user_shifts CASCADE;
-DROP TABLE IF EXISTS shifts CASCADE;
-DROP TABLE IF EXISTS face_vectors CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-DROP TYPE IF EXISTS user_role CASCADE;
+-- -- Dọn dẹp các bảng và trigger cũ (nếu có) để tránh lỗi khi chạy lại file
+-- DROP TRIGGER IF EXISTS trigger_prevent_spam_attendance ON attendance_events;
+-- DROP FUNCTION IF EXISTS check_spam_attendance();
+-- DROP TABLE IF EXISTS shift_timesheets CASCADE;
+-- DROP TABLE IF EXISTS attendance_events CASCADE;
+-- DROP TABLE IF EXISTS user_shifts CASCADE;
+-- DROP TABLE IF EXISTS shifts CASCADE;
+-- DROP TABLE IF EXISTS face_vectors CASCADE;
+-- DROP TABLE IF EXISTS users CASCADE;
+-- DROP TYPE IF EXISTS user_role CASCADE;
 
 -- Định nghĩa Role bảo mật đồng nhất
 CREATE TYPE user_role AS ENUM ('ADMIN', 'EMPLOYEE');
@@ -41,7 +41,8 @@ CREATE TABLE face_vectors (
 CREATE TABLE shifts (
     shift_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     start_time TIME NOT NULL,
-    end_time TIME NOT NULL
+    end_time TIME NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE
 );
 
 -- 4. Bảng USER_SHIFTS (Bảng trung gian thể hiện quan hệ "work" với thuộc tính working_date)

@@ -186,7 +186,13 @@ const postAttendanceAPI = async (req, res) => {
 
 const getTimesheetsAPI = async (req, res) => {
   try {
-    const query = `
+    // FIX 1: Lấy ngày hiện tại theo chuẩn múi giờ Việt Nam (+07:00), format YYYY-MM-DD
+    const todayVN = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+    const date = req.query.date || todayVN; 
+    
+    const userId = req.query.user_id;
+
+    let query = `
       SELECT u.user_id, u.full_name, 
              s.start_time, s.end_time,
              COALESCE(st.status, 'PENDING') as status, 
@@ -194,15 +200,24 @@ const getTimesheetsAPI = async (req, res) => {
              TO_CHAR(st.first_check_in, 'HH24:MI:SS') as check_in,
              TO_CHAR(st.last_check_out, 'HH24:MI:SS') as check_out
       FROM users u
-      JOIN user_shifts us ON u.user_id = us.user_id AND us.working_date = CURRENT_DATE
+      JOIN user_shifts us ON u.user_id = us.user_id 
       JOIN shifts s ON us.shift_id = s.shift_id
       LEFT JOIN shift_timesheets st 
              ON u.user_id = st.user_id 
             AND st.shift_id = us.shift_id 
-            AND st.working_date = us.working_date;
+            AND st.working_date = us.working_date
+      WHERE us.working_date = $1
     `;
+    const params = [date];
 
-    const result = await pool.query(query);
+    if (userId) {
+      query += ` AND u.user_id = $2`;
+      params.push(userId);
+    }
+
+    query += ` ORDER BY s.start_time ASC, u.full_name ASC`;
+
+    const result = await pool.query(query, params);
     return res.status(200).json(result.rows);
   } catch (error) {
     console.error("❌ Lỗi lấy bảng công:", error.message);
@@ -213,16 +228,42 @@ const getTimesheetsAPI = async (req, res) => {
 
 const getAttendanceLogsAPI = async (req, res) => {
   try {
-    const query = `
+    const date = req.query.date; 
+    const userId = req.query.user_id; 
+    
+    const limit = parseInt(req.query.limit) || 20; 
+    const offset = parseInt(req.query.offset) || 0; 
+
+    let query = `
       SELECT u.full_name, e.event_type, e.event_time, e.image_url AS imgurl 
       FROM attendance_events e
       JOIN users u ON e.user_id = u.user_id
-      ORDER BY e.event_time DESC
-      LIMIT 20;
+      WHERE 1=1
     `;
-    const result = await pool.query(query);
+    
+    const params = [];
+    let paramIndex = 1;
+
+    if (date) {
+      query += ` AND e.event_time >= $${paramIndex}::timestamp 
+                 AND e.event_time < $${paramIndex}::timestamp + INTERVAL '1 day'`;
+      params.push(date);
+      paramIndex++;
+    }
+
+    if (userId) {
+      query += ` AND e.user_id = $${paramIndex}`;
+      params.push(userId);
+      paramIndex++;
+    }
+
+    query += ` ORDER BY e.event_time DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limit, offset);
+
+    const result = await pool.query(query, params);
     return res.status(200).json(result.rows);
   } catch (error) {
+    console.error("❌ Lỗi lấy nhật ký:", error.message);
     return res.status(500).json({ error: "Lỗi lấy nhật ký" });
   }
 };
