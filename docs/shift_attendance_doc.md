@@ -19,35 +19,42 @@
 
 ---
 
-### 1.3 Attendance 
+### 1.3 Attendance & Roster (Chấm công & Phân lịch)
 
-| Method   | Endpoint            | Description               | Permission |
-| :------- | :------------------ | :------------------------ | :--------- |
-| `GET`    | `/timesheets`       | Xem bảng công tổng hợp    | Auth       |
-**Query Parameters:**
-* `date` (Tùy chọn): Lọc bảng công theo một ngày cụ thể. Nếu không truyền sẽ mặc định lấy ngày hiện tại (theo múi giờ Việt Nam). (Định dạng: YYYY-MM-DD)
-* `user_id` (Tùy chọn): Lọc theo UUID của một nhân viên cụ thể. Nếu không truyền sẽ lấy bảng công của toàn bộ nhân viên.
+#### 1.3.1 Truy vấn dữ liệu chấm công
+| Method | Endpoint | Description | Permission |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/timesheets` | Xem bảng công tổng hợp | `Auth` |
+| `GET` | `/attendance/logs` | Xem nhật ký sự kiện quẹt thẻ | `Auth` |
+| `GET` | `/user-shifts` | Xem lịch phân ca (Roster) | `Auth` |
 
-| `GET`    | `/attendance/logs`  | Xem các sự kiện gần nhất  | Auth       |
-**Query Parameters:**
-* `date` (Tùy chọn): Lọc nhật ký sự kiện theo một ngày cụ thể. Nếu không truyền sẽ lấy toàn bộ lịch sử. (Định dạng: YYYY-MM-DD)
-* `user_id` (Tùy chọn): Lọc theo UUID của một nhân viên cụ thể. Nếu không truyền sẽ lấy lịch sử của toàn bộ nhân viên.
-* `limit` (Tùy chọn): Số lượng bản ghi tối đa trả về (dùng để phân trang). Mặc định là 20. (Định dạng: Số nguyên)
-* `offset` (Tùy chọn): Số lượng bản ghi muốn bỏ qua (dùng để phân trang). Mặc định là 0. (Định dạng: Số nguyên)
+**Chi tiết tham số truy vấn (Query Parameters):**
 
-| `GET`    | `/user-shifts`      | Xem lịch phân ca          | Auth       |
-**Query Parameters:**
-  * `start_date` (Bắt buộc): Ngày bắt đầu lọc (Định dạng: YYYY-MM-DD)
-  * `end_date` (Bắt buộc): Ngày kết thúc lọc (Định dạng: YYYY-MM-DD)
-  * `user_id` (Tùy chọn): Lọc theo UUID của một nhân viên cụ thể. Nếu không truyền sẽ lấy toàn bộ nhân viên.
+* **/timesheets**:
+    * `date` (Tùy chọn): Lọc theo ngày (Định dạng: `YYYY-MM-DD`). Mặc định lấy ngày hiện tại (VN).
+    * `user_id` (Tùy chọn): Lọc theo UUID của một nhân viên cụ thể.
+* **/attendance/logs**:
+    * `date` (Tùy chọn): Lọc theo ngày cụ thể (Định dạng: `YYYY-MM-DD`).
+    * `user_id` (Tùy chọn): Lọc theo nhân viên.
+    * `limit` & `offset`: Dùng để phân trang (Mặc định: 20/0).
+* **/user-shifts (GET)**:
+    * `start_date` & `end_date` (Bắt buộc): Khoảng thời gian cần xem (Định dạng: `YYYY-MM-DD`).
+    * `user_id` (Tùy chọn): Lọc theo nhân viên.
 
-| `POST`   | `/user-shifts`      | Gán ca cho user           | Auth       |
-| `POST`   | `/user-shifts/bulk` | Gán ca hàng loạt          | Admin      |
-| `DELETE` | `/user-shifts`      | Hủy lịch phân ca          | Auth       |
-**Query Parameters (Bắt buộc phải có đủ 3 tham số):**
-  * user_id: UUID của nhân viên
-  * shift_id: ID của ca làm việc
-  * working_date: Ngày làm việc cần hủy (Định dạng: YYYY-MM-DD)
+---
+
+#### 1.3.2 Thao tác nghiệp vụ phân ca
+| Method | Endpoint | Description | Permission |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/user-shifts` | Gán ca đơn lẻ cho nhân viên | `Auth` |
+| `POST` | `/user-shifts/bulk` | Gán ca hàng loạt (Transaction) | `Admin` |
+| `DELETE` | `/user-shifts` | Hủy lịch phân ca | `Auth` |
+
+**Lưu ý cho lệnh DELETE `/user-shifts`:**
+Để hủy lịch, hệ thống yêu cầu truyền chính xác **3 tham số** sau qua Query String:
+1. `user_id`: UUID của nhân viên.
+2. `shift_id`: ID của ca làm việc.
+3. `working_date`: Ngày làm việc cần xóa (`YYYY-MM-DD`).
 
 ---
 
@@ -75,9 +82,9 @@ Dưới đây là chi tiết các API xử lý logic nghiệp vụ cốt lõi c�
     "status": "success"
   }
 }
+```
 
-### API 2: Phân ca làm việc hàng loạt (Bulk Assign)
-
+#### API 2: Phân ca làm việc hàng loạt (Bulk Assign)
 * **Đường dẫn:** `POST /user-shifts/bulk`
 * **Mục đích:** Gán lịch làm việc cho nhiều nhân viên trong nhiều ngày cùng lúc. Tích hợp Database Transaction (`BEGIN/COMMIT`) và thuật toán kiểm tra chồng chéo ca (`Overlap Constraint`).
 
@@ -110,7 +117,7 @@ Dưới đây là chi tiết các API xử lý logic nghiệp vụ cốt lõi c�
 }
 ```
 
-**Thất bại (409 Conflict - Do bị đè giờ hoặc vi phạm ràng buộc):**
+**Thất bại (409 Conflict):**
 ```json
 {
   "error": "Xung đột ca: Nhân viên 550e8400... vào ngày 2026-05-01 đã có lịch làm việc trùng thời gian này."
@@ -133,7 +140,7 @@ Dưới đây là chi tiết các API xử lý logic nghiệp vụ cốt lõi c�
 
 ---
 
-### 3.2 Shift Handling
+### Shift Handling
 
 #### Shift Definition
 
@@ -167,12 +174,12 @@ Khi gán ca:
 
 ---
 
-### 3.3 Attendance Event Model
+### Attendance Event Model
 
 Hệ thống hoạt động theo mô hình **event-based**: CHECK_IN → CHECK_OUT → CHECK_IN → CHECK_OUT → ...
 
 
-### 3.4 Timesheet Calculation
+### Timesheet Calculation
 
 #### Event Collection
 
@@ -199,7 +206,7 @@ Working Hours = tổng thời gian của tất cả cặp IN/OUT hợp lệ
 
 ---
 
-### 3.5 Attendance Status
+### Attendance Status
 
 | Status       | Meaning                               |
 | ------------ | ------------------------------------- |
