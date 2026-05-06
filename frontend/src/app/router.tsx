@@ -6,6 +6,8 @@ import { DashboardPage } from '../pages/DashboardPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { UserManagementPage } from '../pages/UserManagementPage';
+import { AttendanceLivePage } from '../pages/AttendanceLivePage';
+import { AttendanceLogsPage } from '../pages/AttendanceLogsPage';
 
 export const router = createBrowserRouter([
   {
@@ -35,6 +37,14 @@ export const router = createBrowserRouter([
       {
         path: 'attendance-test',
         element: <AttendanceTestPage />,
+      },
+      {
+        path: 'attendance-live',
+        element: <AttendanceLivePage />,
+      },
+      {
+        path: 'attendance-logs',
+        element: <AttendanceLogsPage />,
       },
       {
         path: '*',
