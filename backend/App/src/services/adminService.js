@@ -24,8 +24,7 @@ const enrollUserService = async (userData, file) => {
 
         const aiResponse = await axios.post('http://127.0.0.1:5000/extract', file.buffer, {
             headers: {
-                'Content-Type': 'application/octet-stream',
-                // BẮT BUỘC PHẢI CÓ DÒNG NÀY ĐỂ ÉP AXIOS GỬI NGUYÊN KHỐI:
+                'Content-Type': 'image/jpeg',
                 'Content-Length': file.buffer.length 
             }
         });
@@ -107,9 +106,7 @@ const updatePhotoService = async (id, file) => {
 
         const aiResponse = await axios.post('http://127.0.0.1:5000/extract', file.buffer, {
             headers: {
-                'Content-Type': 'application/octet-stream',
-                // BẮT BUỘC PHẢI CÓ DÒNG NÀY ĐỂ ÉP AXIOS GỬI NGUYÊN KHỐI:
-                'Content-Length': file.buffer.length 
+                'Content-Type': 'image/jpeg',
             }
         });
 
@@ -183,8 +180,66 @@ const deleteUserService = async (id) => {
     }
 };
 
+
+const getUsersService = async (search, limit, page) => { 
+    // 1. BẢO VỆ SERVER (Limit Guard)
+    const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100); 
+    const safePage = Math.max(parseInt(page) || 1, 1);
+    const offset = (safePage - 1) * safeLimit;
+
+    let query = `SELECT user_id, full_name, email, role FROM users WHERE 1=1`;
+    let countQuery = `SELECT COUNT(*) AS total_count FROM users WHERE 1=1`;
+    
+    const params = [];
+    let paramIndex = 1;
+
+    // 2. TỐI ƯU TÌM KIẾM
+    if (search && search.trim() !== '') {
+        const searchTerm = `%${search.trim()}%`;
+        query += ` AND (full_name ILIKE $${paramIndex} OR user_id::text ILIKE $${paramIndex})`;
+        countQuery += ` AND (full_name ILIKE $${paramIndex} OR user_id::text ILIKE $${paramIndex})`;
+        params.push(searchTerm);
+        paramIndex++;
+    }
+
+
+    // 3. CHỐNG LỖI PHÂN TRANG (Stable Pagination)
+    query += ` ORDER BY full_name ASC, user_id ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    
+    const dataParams = [...params, safeLimit, offset];
+
+    try {
+        const [dataRes, countRes] = await Promise.all([
+            pool.query(query, dataParams),
+            pool.query(countQuery, params) 
+        ]);
+
+        const totalRecords = parseInt(countRes.rows[0].total_count, 10);
+        
+        const totalPages = Math.max(Math.ceil(totalRecords / safeLimit), 1);
+
+        return {
+            users: dataRes.rows,
+            meta: {
+                total_records: totalRecords,
+                total_pages: totalPages,
+                current_page: safePage,
+                limit: safeLimit,
+                has_next: safePage < totalPages, 
+                has_prev: safePage > 1           
+            }
+        };
+    } catch (error) {
+        console.error("❌ [SERVICE ERROR] Lỗi lấy danh sách User:", error.message);
+        throw error; 
+    }
+};
+
+
+
 module.exports = {
     enrollUserService,
     updatePhotoService,
-    deleteUserService
+    deleteUserService,
+    getUsersService
 };
