@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { http } from '../api/http';
 
 type Role = 'ADMIN' | 'EMPLOYEE';
@@ -18,6 +18,7 @@ function extractError(error: unknown): string {
 }
 
 export function UserManagementPage() {
+  const [users, setUsers] = useState<Array<{ id: string; email: string; name?: string; role?: string }>>([]);
   const [feedback, setFeedback] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -35,6 +36,21 @@ export function UserManagementPage() {
   });
 
   const [deleteUserId, setDeleteUserId] = useState('');
+
+  const fetchUsers = async () => {
+    try {
+      const { data } = await http.get('/users');
+      if (Array.isArray(data)) {
+        setUsers(data);
+        return;
+      }
+      if (Array.isArray(data?.data)) {
+        setUsers(data.data);
+      }
+    } catch {
+      // ignore if backend doesn't expose /users
+    }
+  };
 
   const enrollUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -58,12 +74,40 @@ export function UserManagementPage() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setFeedback(`Enroll success: ${data.message}`);
+      setEnroll({
+        full_name: '',
+        email: '',
+        password: '',
+        role: 'EMPLOYEE',
+        photo: null,
+      });
+      await fetchUsers();
     } catch (error) {
       setFeedback(`Enroll failed: ${extractError(error)}`);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await http.get('/users');
+        if (!mounted) return;
+        if (Array.isArray(data)) {
+          setUsers(data);
+          return;
+        }
+        if (Array.isArray(data?.data)) {
+          setUsers(data.data);
+        }
+      } catch (e) {
+        // ignore if backend doesn't expose /users
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const updateUserPhoto = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -83,6 +127,11 @@ export function UserManagementPage() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setFeedback(`Update success: ${data.message}`);
+      setUpdatePhoto({
+        userId: '',
+        photo: null,
+      });
+      await fetchUsers();
     } catch (error) {
       setFeedback(`Update failed: ${extractError(error)}`);
     } finally {
@@ -103,6 +152,8 @@ export function UserManagementPage() {
       setLoading(true);
       const { data } = await http.delete(`/users/${deleteUserId}`);
       setFeedback(`Delete success: ${data.message}`);
+      setDeleteUserId('');
+      await fetchUsers();
     } catch (error) {
       setFeedback(`Delete failed: ${extractError(error)}`);
     } finally {
@@ -116,6 +167,41 @@ export function UserManagementPage() {
         <h2>User Management</h2>
         <p>Current backend has enroll, update photo, and delete endpoints only.</p>
       </header>
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>Users</h3>
+          <button className="button ghost" type="button" onClick={fetchUsers} disabled={loading}>
+            Refresh
+          </button>
+        </div>
+        {users.length === 0 ? (
+          <div className="muted">No users fetched (or endpoint unavailable)</div>
+        ) : (
+          <div className="card">
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: 8 }}>ID</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Email</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Name</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id} style={{ borderTop: '1px solid var(--line)' }}>
+                    <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{u.id}</td>
+                    <td style={{ padding: 8 }}>{u.email}</td>
+                    <td style={{ padding: 8 }}>{u.name || '—'}</td>
+                    <td style={{ padding: 8 }}>{u.role || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className="grid forms-3">
         <form className="card stack" onSubmit={enrollUser}>

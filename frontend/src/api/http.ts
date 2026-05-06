@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getAuthToken } from '../features/auth/authStorage';
+import { clearAuth, getAuthToken } from '../features/auth/authStorage';
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/v1/api';
@@ -18,3 +18,16 @@ http.interceptors.request.use((config) => {
   }
   return config;
 });
+
+http.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      clearAuth();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  },
+);
