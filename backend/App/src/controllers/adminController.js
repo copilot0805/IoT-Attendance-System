@@ -1,4 +1,4 @@
-const { enrollUserService, updatePhotoService, deleteUserService } = require('../services/adminService.js');
+const { enrollUserService, updatePhotoService, deleteUserService,getUsersService } = require('../services/adminService.js');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
@@ -91,8 +91,37 @@ const deleteUser = async (req, res) => {
     }
 };
 
+
+const getUsersAPI = async (req, res) => {
+    try {
+        const search = req.query.search || "";
+        
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const page = parseInt(req.query.page, 10) || 1;   
+
+        // Chặn lỗi tà đạo từ Frontend (nhập page = -1)
+        if (page < 1 || limit < 1) {
+            return res.status(400).json({ error: "Page và Limit phải lớn hơn 0" });
+        }
+
+        const result = await getUsersService(search, limit, page);
+
+        return res.status(200).json({
+            message: "Lấy danh sách nhân viên thành công",
+            data: result.users,
+            pagination: result.meta
+        });
+
+    } catch (error) {
+        console.error("❌ Lỗi Controller Get Users:", error.message);
+        return res.status(500).json({ error: "Lỗi hệ thống khi tải danh sách người dùng" });
+    }
+};
+
+
 module.exports = {
     postEnrollUserAPI,
     updatePhotoAPI,
-    deleteUser
+    deleteUser,
+    getUsersAPI
 };

@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -48,11 +49,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [token, setToken] = useState<string | null>(getAuthToken());
   const [user, setUser] = useState<AuthUser | null>(getAuthUser());
 
-  const login = async (payload: LoginPayload) => {
+  const login = useCallback(async (payload: LoginPayload) => {
     const { data } = await http.post<LoginResponse>('/login', payload);
 
     if (data.EC !== 0 || !data.access_token || !data.user) {
-      throw new Error(data.EM || 'Dang nhap that bai');
+      throw new Error(data.EM || 'Login failed');
     }
 
     const normalizedUser: AuthUser = {
@@ -65,13 +66,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setAuthUser(normalizedUser);
     setToken(data.access_token);
     setUser(normalizedUser);
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     clearAuth();
     setToken(null);
     setUser(null);
-  };
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -80,7 +81,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       login,
       logout,
     }),
-    [token, user],
+    [token, user, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

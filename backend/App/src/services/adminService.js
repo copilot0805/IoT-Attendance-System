@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const FormData = require('form-data');
 const pool = require('../db');
+const fs = require('fs');
 
 const enrollUserService = async (userData, file) => {
     const { full_name, email, password, role } = userData;
@@ -11,17 +12,20 @@ const enrollUserService = async (userData, file) => {
         // ==========================================
         // 1. GỌI AI MICROSERVICE TRÍCH XUẤT VECTOR
         // ==========================================
-        const form = new FormData();
-        // Sử dụng file.buffer vì ta sẽ cấu hình Multer lưu ở RAM (Memory)
-        form.append('file', file.buffer, {
-            filename: file.originalname,
-            contentType: file.mimetype,
-        });
+        // const form = new FormData();
+        // // Sử dụng file.buffer vì ta sẽ cấu hình Multer lưu ở RAM (Memory)
+        // form.append('file', file.buffer, {
+        //     filename: file.originalname,
+        //     contentType: file.mimetype,
+        // });
 
-        // Gửi ảnh sang port 5001 (Python AI)
+        // Gửi ảnh sang port 5000 (Python AI)
+
+
         const aiResponse = await axios.post('http://127.0.0.1:5000/extract', file.buffer, {
             headers: {
-                'Content-Type': 'image/jpeg'
+                'Content-Type': 'image/jpeg',
+                'Content-Length': file.buffer.length 
             }
         });
 
@@ -93,15 +97,16 @@ const updatePhotoService = async (id, file) => {
         }
 
         // 2. Gọi AI microservice trích xuất vector
-        const form = new FormData();
-        form.append('file', file.buffer, {
-            filename: file.originalname,
-            contentType: file.mimetype,
-        });
+        // const form = new FormData();
+        // form.append('file', file.buffer, {
+        //     filename: file.originalname,
+        //     contentType: file.mimetype,
+        // });
+
 
         const aiResponse = await axios.post('http://127.0.0.1:5000/extract', file.buffer, {
             headers: {
-                'Content-Type': 'image/jpeg'
+                'Content-Type': 'image/jpeg',
             }
         });
 
@@ -175,8 +180,66 @@ const deleteUserService = async (id) => {
     }
 };
 
+
+const getUsersService = async (search, limit, page) => { 
+    // 1. BẢO VỆ SERVER (Limit Guard)
+    const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100); 
+    const safePage = Math.max(parseInt(page) || 1, 1);
+    const offset = (safePage - 1) * safeLimit;
+
+    let query = `SELECT user_id, full_name, email, role FROM users WHERE 1=1`;
+    let countQuery = `SELECT COUNT(*) AS total_count FROM users WHERE 1=1`;
+    
+    const params = [];
+    let paramIndex = 1;
+
+    // 2. TỐI ƯU TÌM KIẾM
+    if (search && search.trim() !== '') {
+        const searchTerm = `%${search.trim()}%`;
+        query += ` AND (full_name ILIKE $${paramIndex} OR user_id::text ILIKE $${paramIndex})`;
+        countQuery += ` AND (full_name ILIKE $${paramIndex} OR user_id::text ILIKE $${paramIndex})`;
+        params.push(searchTerm);
+        paramIndex++;
+    }
+
+
+    // 3. CHỐNG LỖI PHÂN TRANG (Stable Pagination)
+    query += ` ORDER BY full_name ASC, user_id ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    
+    const dataParams = [...params, safeLimit, offset];
+
+    try {
+        const [dataRes, countRes] = await Promise.all([
+            pool.query(query, dataParams),
+            pool.query(countQuery, params) 
+        ]);
+
+        const totalRecords = parseInt(countRes.rows[0].total_count, 10);
+        
+        const totalPages = Math.max(Math.ceil(totalRecords / safeLimit), 1);
+
+        return {
+            users: dataRes.rows,
+            meta: {
+                total_records: totalRecords,
+                total_pages: totalPages,
+                current_page: safePage,
+                limit: safeLimit,
+                has_next: safePage < totalPages, 
+                has_prev: safePage > 1           
+            }
+        };
+    } catch (error) {
+        console.error("❌ [SERVICE ERROR] Lỗi lấy danh sách User:", error.message);
+        throw error; 
+    }
+};
+
+
+
 module.exports = {
     enrollUserService,
     updatePhotoService,
-    deleteUserService
+    deleteUserService,
+    getUsersService
 };
