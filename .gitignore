@@ -288,6 +288,11 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 
+# Frontend Vite build output & local env
+frontend/dist/
+frontend/.env
+*.tsbuildinfo
+
 # Visual Studio 6 build log
 *.plg
 
