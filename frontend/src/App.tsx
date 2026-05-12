@@ -57,7 +57,7 @@ function LoginPage() {
     setError("");
     try {
       const response = await api.post("/login", { email, password });
-      authStorage.setToken(response.data.accessToken || response.data.token);
+      authStorage.setToken(response.data.accessToken || response.data.token ||response.data.access_token);
       navigate("/");
     } catch (e: any) {
       setError(e?.response?.data?.error || "Login failed");
