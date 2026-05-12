@@ -1,6 +1,6 @@
 # IoT Attendance - Diagram Index
 
-Trang này tổng hợp toàn bộ 4 sơ đồ chính của dự án để tiện theo dõi và trình bày.
+Trang này tổng hợp toàn bộ 7 sơ đồ chính của dự án để tiện theo dõi và trình bày.
 
 ## Muc luc
 
@@ -8,6 +8,9 @@ Trang này tổng hợp toàn bộ 4 sơ đồ chính của dự án để tiệ
 2. [Database ERD](./erd.md)
 3. [Attendance Verification Sequence](./attendance-sequence.md)
 4. [Timesheet State Machine](./timesheet-state.md)
+5. [Deployment Diagram](./deployment.md)
+6. [Data Flow Diagram](./dataflow.md)
+7. [Component Diagram](./components.md)
 
 ---
 
@@ -162,3 +165,21 @@ stateDiagram-v2
     PRESENT --> [*]: day close
     ABSENT --> [*]: day close
 ```
+
+---
+
+## 5) Deployment Diagram
+
+Xem chi tiết tại [deployment.md](./deployment.md) - Mô tả cách các thành phần được triển khai trên các server/cloud service, bao gồm ngrok tunnel, HiveMQ Cloud, Cloudinary, và cách chúng tương tác với nhau.
+
+---
+
+## 6) Data Flow Diagram
+
+Xem chi tiết tại [dataflow.md](./dataflow.md) - Mô tả luồng dữ liệu từ ESP32-CAM → Backend → Database → Output, bao gồm các bước xử lý, lưu trữ và hiển thị dữ liệu.
+
+---
+
+## 7) Component Diagram
+
+Xem chi tiết tại [components.md](./components.md) - Mô tả các thành phần chính của hệ thống chia thành các lớp: IoT Layer, Backend Layer, Service Layer, Integration Layer, Data Layer, và Frontend Layer, cùng với mối quan hệ giữa chúng.
