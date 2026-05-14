@@ -105,11 +105,3 @@
 * **Ghi chú dữ liệu:**
   * `check_in`: Thời điểm ghi nhận lượt **Check-in đầu tiên** trong khung giờ ca làm việc.
   * `check_out`: Thời điểm ghi nhận lượt **Check-out cuối cùng** tính đến thời điểm hiện tại. Nếu nhân viên quét mặt ra vào nhiều lần, hệ thống sẽ luôn cập nhật giờ mới nhất vào đây.
-
-### 💡 Bảng chú giải trạng thái (Status) trong Timesheets:
-* `PENDING`: Nhân viên chưa có thao tác nào trong ca làm việc.
-* `WORKING`: Đã CHECK_IN và ca làm việc vẫn đang diễn ra.
-* `PRESENT`: Đã hoàn thành đủ chu trình IN-OUT hợp lệ, làm việc bình thường.
-* `LATE`: Hoàn thành chu trình IN-OUT nhưng bị tính là đi trễ.
-* `INCOMPLETE`: Lỗi thao tác! Có CHECK_IN nhưng không CHECK_OUT (hoặc ngược lại) khi ca làm việc đã kết thúc. Cần Admin xem xét.
-* `ABSENT`: Vắng mặt không phép (Được đánh dấu tự động bởi hệ thống lúc 12:00 trưa hôm sau theo múi giờ Asia/Ho_Chi_Minh).
