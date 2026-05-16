@@ -119,11 +119,9 @@ const postAttendanceAPI = async (req, res) => {
             if (shiftData) {
               const { activeShift, shiftStartFull, shiftEndFull} = shiftData;
 
-              await client.query('COMMIT');
-
               // Tính công
               const { shift_id, working_date } = activeShift;
-              const eventsRes = await pool.query(`
+              const eventsRes = await client.query(`
                 SELECT 1
                 FROM shift_timesheets
                 WHERE user_id = $1
@@ -137,6 +135,7 @@ const postAttendanceAPI = async (req, res) => {
                 await upsertShiftTimesheet(bestMatch.user_id, shift_id, working_date, bestMatch.full_name,event_time, shiftStartFull, shiftEndFull);
               }
             }
+            await client.query('COMMIT');
 
 
             console.log(`📝 [DB LOG] Đã lưu lịch sử cho ${bestMatch.full_name}`);
