@@ -104,46 +104,40 @@ const postAttendanceAPI = async (req, res) => {
         let eventId = null; 
 
         try {
-            await client.query('BEGIN');
-            await client.query(`SELECT 1 FROM users WHERE user_id = $1 FOR UPDATE`, [bestMatch.user_id]);
-
-            const shiftData = await findUserActiveShift(bestMatch.user_id);
-            
-            // LỖI: KHÔNG CÓ CA LÀM VIỆC -> Trả về TRƯỜNG HỢP 3 (Bỏ qua frame)
-            if (!shiftData) {
-                await client.query('ROLLBACK');
-                return res.status(200).json({ 
-                    match: false, 
-                    status: "failed", 
-                    error: "Ngoài giờ làm việc hoặc không có ca" 
-                });
-            }
-
-            const { activeShift, shiftStartFull, shiftEndFull} = shiftData;
-
             // Ghi log
             const logQuery = `INSERT INTO attendance_events (user_id, event_type, image_url) VALUES ($1, 'CHECK_IN', NULL) RETURNING event_id, event_time`;
             const logResult = await client.query(logQuery, [bestMatch.user_id]);
             const { event_id, event_time } = logResult.rows[0]; 
             eventId = event_id;
 
-            await client.query('COMMIT');
+            await client.query('BEGIN');
+            await client.query(`SELECT 1 FROM users WHERE user_id = $1 FOR UPDATE`, [bestMatch.user_id]);
 
-            // Tính công
-            const { shift_id, working_date } = activeShift;
-            const eventsRes = await pool.query(`
-              SELECT 1
-              FROM shift_timesheets
-              WHERE user_id = $1
-                AND shift_id = $2
-                AND working_date = $3
-            `, [bestMatch.user_id, shift_id, working_date]);
+            const shiftData = await findUserActiveShift(bestMatch.user_id);
+            
+            // LỖI: KHÔNG CÓ CA LÀM VIỆC -> Trả về TRƯỜNG HỢP 3 (Bỏ qua frame)
+            if (shiftData) {
+              const { activeShift, shiftStartFull, shiftEndFull} = shiftData;
 
-            const events = eventsRes.rows;
+              await client.query('COMMIT');
 
-            if(events.length === 0){
-              await upsertShiftTimesheet(bestMatch.user_id, shift_id, working_date, bestMatch.full_name,event_time, shiftStartFull, shiftEndFull);
+              // Tính công
+              const { shift_id, working_date } = activeShift;
+              const eventsRes = await pool.query(`
+                SELECT 1
+                FROM shift_timesheets
+                WHERE user_id = $1
+                  AND shift_id = $2
+                  AND working_date = $3
+              `, [bestMatch.user_id, shift_id, working_date]);
+
+              const events = eventsRes.rows;
+
+              if(events.length === 0){
+                await upsertShiftTimesheet(bestMatch.user_id, shift_id, working_date, bestMatch.full_name,event_time, shiftStartFull, shiftEndFull);
+              }
             }
+
 
             console.log(`📝 [DB LOG] Đã lưu lịch sử cho ${bestMatch.full_name}`);
 
