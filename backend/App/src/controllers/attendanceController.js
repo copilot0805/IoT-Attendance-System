@@ -390,20 +390,43 @@ const postAttendanceAPI = async (req, res) => {
       });
 
       // Luồng xử lý ghi log chạy ngầm (Background) giữ nguyên...
+      // Luồng xử lý chạy ngầm (Background Task)
       (async () => {
         const client = await pool.connect();
+        let eventId = null;
         try {
           await client.query('BEGIN');
+          const logQuery = `INSERT INTO attendance_events (user_id, event_type, image_url) VALUES ($1, 'CHECK_IN', NULL) RETURNING event_id, event_time`;
+          const logResult = await client.query(logQuery, [bestMatch.user_id]);
+          const { event_id, event_time } = logResult.rows[0];
+          eventId = event_id;
           await client.query(`SELECT 1 FROM users WHERE user_id = $1 FOR UPDATE`, [bestMatch.user_id]);
           const shiftData = await findUserActiveShift(bestMatch.user_id);
-          if (!shiftData) { await client.query('ROLLBACK'); return; }
-          const { activeShift, nextEvent } = shiftData;
-          const logQuery = `INSERT INTO attendance_events (user_id, event_type, image_url) VALUES ($1, $2, NULL) RETURNING event_id`;
-          const logResult = await client.query(logQuery, [bestMatch.user_id, nextEvent]);
+
+          if (shiftData) {
+            const { activeShift, shiftStartFull, shiftEndFull } = shiftData;
+            const { shift_id, working_date } = activeShift;
+            const eventsRes = await client.query(`
+              SELECT 1 FROM shift_timesheets
+              WHERE user_id = $1 AND shift_id = $2 AND working_date = $3
+            `, [bestMatch.user_id, shift_id, working_date]);
+
+            if (eventsRes.rows.length === 0) {
+              await upsertShiftTimesheet(bestMatch.user_id, shift_id, working_date, bestMatch.full_name, event_time, shiftStartFull, shiftEndFull);
+            }
+          } 
+
           await client.query('COMMIT');
-          await upsertShiftTimesheet(bestMatch.user_id, activeShift.shift_id, activeShift.working_date, bestMatch.full_name);
+
+          uploadToCloudinary(imageBuffer)
+            .then(async (imgUrl) => {
+              await pool.query(`UPDATE attendance_events SET image_url = $1 WHERE event_id = $2`, [imgUrl, eventId]);
+            })
+            .catch((err) => console.error("❌ [CLOUDINARY ERROR]", err.message));
+
         } catch (err) {
           await client.query('ROLLBACK');
+          console.error("❌ [BACKGROUND DB ERROR]:", err.message);
         } finally {
           client.release();
         }
