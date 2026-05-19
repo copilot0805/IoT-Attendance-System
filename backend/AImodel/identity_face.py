@@ -37,7 +37,7 @@ def build_face_database(database: dict) -> dict:
             result = DeepFace.represent(
                 img_path=img_path,
                 model_name='ArcFace',
-                detector_backend='opencv',
+                detector_backend='retinaface',
                 enforce_detection=True,
                 align=False
             )
@@ -69,7 +69,7 @@ def identify_face(query_img):
         result = DeepFace.represent(
             img_path=query_img,
             model_name="ArcFace",
-            detector_backend="opencv",
+            detector_backend="retinaface",
             enforce_detection=False,
             align=False
         )

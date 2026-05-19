@@ -86,25 +86,6 @@ Dung lượng dự kiến: Khoảng 300 KB - 600 KB mỗi tấm ảnh.
 
 
 
-3. Thông số hạ tầng HiveMQ Cloud (Cố định)
-
-Sau khi AI nhận diện xong, các bạn cần gửi lệnh "unlock" qua HiveMQ Cloud để mở cửa. Thông số Cluster thực tế như sau:
-
-
-
-Thông số	Giá trị thực tế
-
-Cluster URL	2ee617fd7b3842639f968abf50a4670f.s1.eu.hivemq.cloud
-
-WebSocket Port	8884 (Bắt buộc cho Web App)
-
-Username	hcmut\_attendance
-
-Password	(Theo mật khẩu nhóm đã thống nhất)
-
-Topic	bku/attendance/gate/control
-
-Thư viện đề xuất: Sử dụng mqtt.js để kết nối từ trình duyệt Web App qua giao thức wss://.
 
 
 

@@ -30,7 +30,7 @@ const enrollUserService = async (userData, file) => {
         });
 
         const vectorArray = aiResponse.data.vector;
-        const modelVersion = aiResponse.data.model || 'ArcFace';
+        const modelVersion = `${aiResponse.data.model || 'ArcFace'}:${aiResponse.data.detector || 'unknown'}:align=${aiResponse.data.align === false ? 'false' : 'true'}`;
         const vectorString = `[${vectorArray.join(',')}]`;
 
         // ==========================================
@@ -111,7 +111,7 @@ const updatePhotoService = async (id, file) => {
         });
 
         const vectorArray = aiResponse.data.vector;
-        const modelVersion = aiResponse.data.model || 'ArcFace';
+        const modelVersion = `${aiResponse.data.model || 'ArcFace'}:${aiResponse.data.detector || 'unknown'}:align=${aiResponse.data.align === false ? 'false' : 'true'}`;
         const vectorString = `[${vectorArray.join(',')}]`;
 
         const vectorResult = await client.query(
