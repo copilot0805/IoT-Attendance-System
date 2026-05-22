@@ -1,8 +1,15 @@
 export const authStorage = {
   getToken(): string | null {
-    return localStorage.getItem("accessToken");
+    const token = localStorage.getItem("accessToken");
+    if (!token || token === "undefined" || token === "null") {
+      return null;
+    }
+    return token;
   },
-  setToken(token: string): void {
+  setToken(token: string | undefined | null): void {
+    if (!token || token === "undefined" || token === "null") {
+      return;
+    }
     localStorage.setItem("accessToken", token);
   },
   clear(): void {

@@ -25,13 +25,19 @@ const enrollUserService = async (userData, file) => {
         const aiResponse = await axios.post('http://127.0.0.1:5000/extract', file.buffer, {
             headers: {
                 'Content-Type': 'image/jpeg',
-                'Content-Length': file.buffer.length 
+                'Content-Length': file.buffer.length
             }
         });
 
         const vectorArray = aiResponse.data.vector;
         const modelVersion = `${aiResponse.data.model || 'ArcFace'}:${aiResponse.data.detector || 'unknown'}:align=${aiResponse.data.align === false ? 'false' : 'true'}`;
         const vectorString = `[${vectorArray.join(',')}]`;
+        console.log(
+            `[AI ENROLL] detector=${aiResponse.data.detector || 'unknown'}, ` +
+            `face_area_ratio=${aiResponse.data.face_area_ratio ?? 'N/A'}, ` +
+            `face_confidence=${aiResponse.data.face_confidence ?? 'N/A'}, ` +
+            `model=${modelVersion}`
+        );
 
         // ==========================================
         // 2. LƯU DATABASE BẰNG TRANSACTION
@@ -78,7 +84,7 @@ const enrollUserService = async (userData, file) => {
         if (error.code === '23505') {
             throw new Error('EMAIL_EXISTS: Email này đã tồn tại trong hệ thống');
         }
-        console.error('Service Error (enrollUserService):', error);
+        console.error('Service Error (enrollUserService):', error.message);
         throw new Error('DB_ERROR: Lỗi hệ thống nội bộ');
     } finally {
         client.release();
@@ -113,6 +119,12 @@ const updatePhotoService = async (id, file) => {
         const vectorArray = aiResponse.data.vector;
         const modelVersion = `${aiResponse.data.model || 'ArcFace'}:${aiResponse.data.detector || 'unknown'}:align=${aiResponse.data.align === false ? 'false' : 'true'}`;
         const vectorString = `[${vectorArray.join(',')}]`;
+        console.log(
+            `[AI UPDATE PHOTO] user_id=${id}, detector=${aiResponse.data.detector || 'unknown'}, ` +
+            `face_area_ratio=${aiResponse.data.face_area_ratio ?? 'N/A'}, ` +
+            `face_confidence=${aiResponse.data.face_confidence ?? 'N/A'}, ` +
+            `model=${modelVersion}`
+        );
 
         const vectorResult = await client.query(
             `SELECT vector_id FROM face_vectors WHERE user_id = $1 AND is_active = TRUE AND vector = $2`,
@@ -138,10 +150,10 @@ const updatePhotoService = async (id, file) => {
         };
 
     } catch (error) {
-        console.error('Service Error (updatePhotoService):', error);
         if (error.response && error.response.data) {
             throw new Error('AI_ERROR: ' + (error.response.data.detail || error.response.data.error));
         }
+        console.error('Service Error (updatePhotoService):', error.message);
         if (error.code === '22P02') {
             throw new Error('USER_NOT_FOUND: Người dùng không tồn tại');
         }
@@ -173,7 +185,7 @@ const deleteUserService = async (id) => {
             }
         };
     } catch (error) {
-        console.error('Service Error (deleteUserService):', error);
+        console.error('Service Error (deleteUserService):', error.message);
         throw new Error('USER_NOT_FOUND: Người dùng không tồn tại');
     } finally {
         client.release();
@@ -181,15 +193,15 @@ const deleteUserService = async (id) => {
 };
 
 
-const getUsersService = async (search, limit, page) => { 
+const getUsersService = async (search, limit, page) => {
     // 1. BẢO VỆ SERVER (Limit Guard)
-    const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100); 
+    const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
     const safePage = Math.max(parseInt(page) || 1, 1);
     const offset = (safePage - 1) * safeLimit;
 
     let query = `SELECT user_id, full_name, email, role FROM users WHERE 1=1`;
     let countQuery = `SELECT COUNT(*) AS total_count FROM users WHERE 1=1`;
-    
+
     const params = [];
     let paramIndex = 1;
 
@@ -205,17 +217,17 @@ const getUsersService = async (search, limit, page) => {
 
     // 3. CHỐNG LỖI PHÂN TRANG (Stable Pagination)
     query += ` ORDER BY full_name ASC, user_id ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    
+
     const dataParams = [...params, safeLimit, offset];
 
     try {
         const [dataRes, countRes] = await Promise.all([
             pool.query(query, dataParams),
-            pool.query(countQuery, params) 
+            pool.query(countQuery, params)
         ]);
 
         const totalRecords = parseInt(countRes.rows[0].total_count, 10);
-        
+
         const totalPages = Math.max(Math.ceil(totalRecords / safeLimit), 1);
 
         return {
@@ -225,13 +237,13 @@ const getUsersService = async (search, limit, page) => {
                 total_pages: totalPages,
                 current_page: safePage,
                 limit: safeLimit,
-                has_next: safePage < totalPages, 
-                has_prev: safePage > 1           
+                has_next: safePage < totalPages,
+                has_prev: safePage > 1
             }
         };
     } catch (error) {
         console.error("❌ [SERVICE ERROR] Lỗi lấy danh sách User:", error.message);
-        throw error; 
+        throw error;
     }
 };
 

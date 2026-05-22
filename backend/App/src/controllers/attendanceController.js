@@ -368,7 +368,15 @@ const postAttendanceAPI = async (req, res) => {
         `;
     const result = await pool.query(query, [vectorString]);
     const bestMatch = result.rows[0];
-    const THRESHOLD = 0.65;
+    const THRESHOLD = 0.55;
+    console.log(
+      `[AI VERIFY] detector=${aiResponse.data.detector || 'unknown'}, ` +
+      `face_area_ratio=${aiResponse.data.face_area_ratio ?? 'N/A'}, ` +
+      `face_confidence=${aiResponse.data.face_confidence ?? 'N/A'}, ` +
+      `best=${bestMatch ? bestMatch.full_name : 'N/A'}, ` +
+      `distance=${bestMatch ? Number(bestMatch.distance).toFixed(4) : 'N/A'}, ` +
+      `threshold=${THRESHOLD}`
+    );
 
     if (bestMatch && bestMatch.distance <= THRESHOLD) {
       console.log(`✅ [KHỚP KHUÔN MẶT]: ${bestMatch.full_name}`);
@@ -414,7 +422,7 @@ const postAttendanceAPI = async (req, res) => {
             if (eventsRes.rows.length === 0) {
               await upsertShiftTimesheet(bestMatch.user_id, shift_id, working_date, bestMatch.full_name, event_time, shiftStartFull, shiftEndFull);
             }
-          } 
+          }
 
           await client.query('COMMIT');
 
@@ -435,11 +443,20 @@ const postAttendanceAPI = async (req, res) => {
       return;
 
     } else {
-      return res.status(200).json({ match: false, status: "failed" });
+      // Nhận diện thất bại (Người lạ) -> Trả về lập tức để ESP32 báo còi hú/đèn đỏ
+      const currentDist = bestMatch ? bestMatch.distance.toFixed(4) : "N/A";
+      console.log(`❌ [DB MATCH] Người lạ! (Độ lệch: ${currentDist})`);
+
+      return res.status(200).json({
+        match: false,
+        status: "failed"
+      });
     }
 
   } catch (error) {
-    return res.status(200).json({ match: false, status: "failed", error: error.message });
+    const aiDetail = error.response?.data?.detail || error.response?.data?.error;
+    console.log(`[AI VERIFY REJECTED] ${aiDetail || error.message}`);
+    return res.status(200).json({ match: false, status: "failed", error: aiDetail || error.message });
   }
 };
 

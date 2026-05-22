@@ -57,10 +57,16 @@ function LoginPage() {
     setError("");
     try {
       const response = await api.post("/login", { email, password });
-      authStorage.setToken(response.data.accessToken || response.data.token);
+      console.log("LOGIN RESPONSE", response.data);
+      const token = response.data.access_token || response.data.accessToken || response.data.token;
+      if (!token) {
+        throw new Error("Login response did not include a valid access token");
+      }
+      authStorage.setToken(token);
       navigate("/");
     } catch (e: any) {
-      setError(e?.response?.data?.error || "Login failed");
+      console.log("LOGIN ERROR", e?.response?.status, e?.response?.data);
+      setError(e?.response?.data?.error || e?.message || "Login failed");
     }
   };
 
@@ -124,6 +130,7 @@ function UsersPage() {
       setItems(response.data.data || []);
       setError("");
     } catch (e: any) {
+      console.log("LOAD USERS ERROR", e?.response?.status, e?.response?.data, e?.config?.headers);
       setError(e?.response?.data?.error || "Cannot load users");
     }
   };

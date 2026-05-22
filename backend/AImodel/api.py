@@ -175,13 +175,15 @@
 
 from time import perf_counter
 from fastapi import FastAPI, Request, HTTPException
+import os
 import numpy as np
 import cv2
 from deepface import DeepFace
 from starlette.concurrency import run_in_threadpool
 from contextlib import asynccontextmanager
 
-MIN_FACE_AREA_RATIO = 0.01
+MIN_FACE_AREA_RATIO = float(os.getenv("MIN_FACE_AREA_RATIO", "0.02"))
+MIN_FACE_CONFIDENCE = float(os.getenv("MIN_FACE_CONFIDENCE", "0.85"))
 
 # 1. Định nghĩa trạng thái toàn cục để lưu trữ Model đã nạp sẵn
 models_cache = {}
@@ -239,11 +241,20 @@ async def extract_face(request: Request):
         face_height = facial_area.get("h") or 0
         image_height, image_width = img.shape[:2]
         face_area_ratio = (face_width * face_height) / max(image_width * image_height, 1)
+        face_confidence = result[0].get("face_confidence")
 
         if face_area_ratio < MIN_FACE_AREA_RATIO:
             raise ValueError(f"Detected face is too small or unreliable: area_ratio={face_area_ratio:.4f}")
+        if face_confidence is not None and face_confidence < MIN_FACE_CONFIDENCE:
+            raise ValueError(f"Detected face confidence is too low: confidence={face_confidence:.4f}")
 
         end_time = perf_counter()
+        print(
+            f"extract ok detector=opencv align=true "
+            f"face_area_ratio={face_area_ratio:.4f} "
+            f"face_confidence={face_confidence if face_confidence is not None else 'N/A'} "
+            f"time={(end_time - start_time) * 1000:.2f}ms"
+        )
         print(f"⚡ Thời gian trích xuất vector thực tế: {(end_time - start_time) * 1000:.2f}ms")
         
         return {
@@ -251,9 +262,11 @@ async def extract_face(request: Request):
             "model": "ArcFace",
             "detector": "opencv",
             "align": True,
-            "face_area_ratio": round(face_area_ratio, 4)
+            "face_area_ratio": round(face_area_ratio, 4),
+            "face_confidence": face_confidence
         }
-    except ValueError:
+    except ValueError as e:
+        print(f"extract rejected: {e}")
         raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh, vui lòng chụp lại rõ hơn")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

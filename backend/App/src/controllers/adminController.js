@@ -1,4 +1,4 @@
-const { enrollUserService, updatePhotoService, deleteUserService,getUsersService } = require('../services/adminService.js');
+const { enrollUserService, updatePhotoService, deleteUserService, getUsersService } = require('../services/adminService.js');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
@@ -53,7 +53,7 @@ const updatePhotoAPI = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Controller Error (updatePhotoAPI):', error.message || error);
+        console.error('Controller Error (updatePhotoAPI):', error.message);
         if (error.message.startsWith('AI_ERROR:')) {
             return res.status(400).json({ error: error.message.replace('AI_ERROR: ', '') });
         }
@@ -73,7 +73,7 @@ const updatePhotoAPI = async (req, res) => {
 const deleteUser = async (req, res) => {
     try {
         const id = req.params.id;
-        if (!id || isNaN(parseInt(id))) {
+        if (!id) {
             return res.status(400).json({ error: 'ID không hợp lệ' });
         }
         const result = await deleteUserService(id);
@@ -82,7 +82,7 @@ const deleteUser = async (req, res) => {
             data: result.data
         });
     } catch (error) {
-        console.error('Controller Error (deleteUser):', error.message || error);
+        console.error('Controller Error (deleteUser):', error.message);
         if (error.message.startsWith('USER_NOT_FOUND:')) {
             return res.status(404).json({ error: error.message.replace('USER_NOT_FOUND: ', '') });
         } else {
@@ -95,9 +95,9 @@ const deleteUser = async (req, res) => {
 const getUsersAPI = async (req, res) => {
     try {
         const search = req.query.search || "";
-        
+
         const limit = parseInt(req.query.limit, 10) || 10;
-        const page = parseInt(req.query.page, 10) || 1;   
+        const page = parseInt(req.query.page, 10) || 1;
 
         // Chặn lỗi tà đạo từ Frontend (nhập page = -1)
         if (page < 1 || limit < 1) {
