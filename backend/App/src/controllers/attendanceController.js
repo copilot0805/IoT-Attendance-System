@@ -1,8 +1,7 @@
 const axios = require("axios");
 const pool = require("../db");
 
-const { upsertShiftTimesheet, findUserActiveShift } = require("../services/attendanceService");
-const { uploadToCloudinary } = require("../services/uploadFile")
+const { processBackgroundAttendance } = require("../services/attendanceService");
 
 const SUCCESS_COOLDOWN_MS = Number(process.env.SUCCESS_COOLDOWN_MS || 5000);
 let verificationInProgress = false;
@@ -378,8 +377,13 @@ const postAttendanceAPI = async (req, res) => {
       `threshold=${THRESHOLD}`
     );
 
-    if (bestMatch && bestMatch.distance <= THRESHOLD) {
+    if (bestMatch && bestMatch.distance <= THRESHOLD) {try{
       console.log(`✅ [KHỚP KHUÔN MẶT]: ${bestMatch.full_name}`);
+
+      // Ghi log
+      const logQuery = `INSERT INTO attendance_events (user_id, event_type, image_url) VALUES ($1, 'CHECK_IN', NULL) RETURNING event_id, event_time`;
+      const logResult = await pool.query(logQuery, [bestMatch.user_id]);
+      const { event_id, event_time } = logResult.rows[0];
 
       // 🔥 BƯỚC 3: KÍCH HOẠT KHÓA ĐÓNG BĂNG NGAY LẬP TỨC
       isCoolingDown = true;
@@ -397,51 +401,14 @@ const postAttendanceAPI = async (req, res) => {
         command: "unlock" // Thêm lệnh tường minh cho ESP32 nghỉ
       });
 
-      // Luồng xử lý ghi log chạy ngầm (Background) giữ nguyên...
-      // Luồng xử lý chạy ngầm (Background Task)
-      (async () => {
-        const client = await pool.connect();
-        let eventId = null;
-        try {
-          await client.query('BEGIN');
-          const logQuery = `INSERT INTO attendance_events (user_id, event_type, image_url) VALUES ($1, 'CHECK_IN', NULL) RETURNING event_id, event_time`;
-          const logResult = await client.query(logQuery, [bestMatch.user_id]);
-          const { event_id, event_time } = logResult.rows[0];
-          eventId = event_id;
-          await client.query(`SELECT 1 FROM users WHERE user_id = $1 FOR UPDATE`, [bestMatch.user_id]);
-          const shiftData = await findUserActiveShift(bestMatch.user_id);
-
-          if (shiftData) {
-            const { activeShift, shiftStartFull, shiftEndFull } = shiftData;
-            const { shift_id, working_date } = activeShift;
-            const eventsRes = await client.query(`
-              SELECT 1 FROM shift_timesheets
-              WHERE user_id = $1 AND shift_id = $2 AND working_date = $3
-            `, [bestMatch.user_id, shift_id, working_date]);
-
-            if (eventsRes.rows.length === 0) {
-              await upsertShiftTimesheet(bestMatch.user_id, shift_id, working_date, bestMatch.full_name, event_time, shiftStartFull, shiftEndFull);
-            }
-          }
-
-          await client.query('COMMIT');
-
-          uploadToCloudinary(imageBuffer)
-            .then(async (imgUrl) => {
-              await pool.query(`UPDATE attendance_events SET image_url = $1 WHERE event_id = $2`, [imgUrl, eventId]);
-            })
-            .catch((err) => console.error("❌ [CLOUDINARY ERROR]", err.message));
-
-        } catch (err) {
-          await client.query('ROLLBACK');
-          console.error("❌ [BACKGROUND DB ERROR]:", err.message);
-        } finally {
-          client.release();
-        }
-      })();
+      processBackgroundAttendance(bestMatch.user_id, bestMatch.full_name, imageBuffer, event_id, event_time)
+      .catch(err => console.error("Lỗi khi chạy tiến trình ngầm:", err));
 
       return;
-
+    }catch (dbError) {
+        console.error("❌ Lỗi Database khi ghi log:", dbError);
+        return res.status(200).json({ match: false, status: "failed", error: dbError.message });
+      }
     } else {
       // Nhận diện thất bại (Người lạ) -> Trả về lập tức để ESP32 báo còi hú/đèn đỏ
       const currentDist = bestMatch ? bestMatch.distance.toFixed(4) : "N/A";
