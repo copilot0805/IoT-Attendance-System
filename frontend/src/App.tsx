@@ -17,17 +17,27 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
   return children;
 }
 
+function AdminRoute({ children }: { children: JSX.Element }) {
+  if (!authStorage.isAdmin()) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
 function Shell({ children }: { children: JSX.Element }) {
   const navigate = useNavigate();
+  const isAdmin = authStorage.isAdmin();
+
   return (
     <div className="layout">
       <aside className="sidebar">
         <h2>IoT Attendance</h2>
         <nav>
           <Link to="/">Dashboard</Link>
-          <Link to="/users">Users</Link>
-          <Link to="/shifts">Shifts</Link>
-          <Link to="/roster">Roster</Link>
+          {isAdmin && <Link to="/users">Users</Link>}
+          {isAdmin && <Link to="/shifts">Shifts</Link>}
+          {isAdmin && <Link to="/roster">Roster</Link>}
           <Link to="/timesheets">Timesheets</Link>
           <Link to="/logs">Attendance Logs</Link>
           <Link to="/verify">Verify Face Test</Link>
@@ -225,6 +235,7 @@ function UsersPage() {
       </div>
       {error && <p className="error">{error}</p>}
       {success && <p className="success">{success}</p>}
+      <p>Use the User ID column below to fill the update/delete forms.</p>
 
       <div className="grid-two">
         <section className="card inset">
@@ -288,6 +299,7 @@ function UsersPage() {
       <table>
         <thead>
           <tr>
+            <th>User ID</th>
             <th>Name</th>
             <th>Email</th>
             <th>Role</th>
@@ -296,6 +308,7 @@ function UsersPage() {
         <tbody>
           {items.map((user) => (
             <tr key={user.user_id}>
+              <td>{user.user_id}</td>
               <td>{user.full_name}</td>
               <td>{user.email}</td>
               <td>{user.role}</td>
@@ -769,9 +782,30 @@ export function App() {
             <Shell>
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
-                <Route path="/users" element={<UsersPage />} />
-                <Route path="/shifts" element={<ShiftsPage />} />
-                <Route path="/roster" element={<RosterPage />} />
+                <Route
+                  path="/users"
+                  element={
+                    <AdminRoute>
+                      <UsersPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/shifts"
+                  element={
+                    <AdminRoute>
+                      <ShiftsPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/roster"
+                  element={
+                    <AdminRoute>
+                      <RosterPage />
+                    </AdminRoute>
+                  }
+                />
                 <Route path="/timesheets" element={<TimesheetsPage />} />
                 <Route path="/logs" element={<LogsPage />} />
                 <Route path="/verify" element={<VerifyFacePage />} />
