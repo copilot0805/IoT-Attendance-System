@@ -647,6 +647,10 @@ function TimesheetsPage() {
     }
   };
 
+  useEffect(() => {
+    void load();
+  }, []);
+
   return (
     <div className="card">
       <h1>Timesheets</h1>
@@ -695,6 +699,10 @@ function LogsPage() {
       setError(e?.response?.data?.error || "Cannot load logs");
     }
   };
+
+  useEffect(() => {
+    void load();
+  }, []);
 
   return (
     <div className="card">
