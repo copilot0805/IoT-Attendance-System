@@ -1,13 +1,54 @@
 const pool = require("../db");
+const { uploadToCloudinary } = require("./uploadFile");
 
 // Khoảng thời gian cho phép điểm danh sớm/trễ
-const BUFFER_BEFORE = 30 * 60 * 1000; // 30 phút
+const BUFFER_BEFORE = 30 * 60 * 1000; 
 const BUFFER_AFTER  = 0; 
 
-const findUserActiveShift = async (userId) => {
-  const now = new Date();
+const processBackgroundAttendance = async (userId, fullName, imageBuffer, eventId, eventTime) => {
+    // 1. UPLOAD ẢNH
+    try {
+        const image_url = await uploadToCloudinary(imageBuffer);
+        await pool.query(`UPDATE attendance_events SET image_url = $1 WHERE event_id = $2`, [image_url, eventId]);
+    } catch (err) {
+        console.error("❌ [CLOUDINARY ERROR] Lỗi up ảnh:", err.message);
+    }
 
-  // 1. Lấy tất cả ca làm việc của user trong ngày hôm nay (và ca đêm hôm qua nếu có)
+    // 2. TÍNH CÔNG
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+  
+        await client.query(`SELECT 1 FROM users WHERE user_id = $1 FOR UPDATE`, [userId]);
+        const shiftData = await findUserActiveShift(userId, eventTime);
+        if (shiftData) {
+            const { activeShift, shiftStartFull, shiftEndFull } = shiftData;
+            const { shift_id, working_date } = activeShift;
+            
+            const eventsRes = await client.query(`
+                SELECT 1 FROM shift_timesheets
+                WHERE user_id = $1 AND shift_id = $2 AND working_date = $3
+            `, [userId, shift_id, working_date]);
+
+            if (eventsRes.rows.length === 0) {
+                await upsertShiftTimesheet(client, userId, shift_id, working_date, fullName, eventTime, shiftStartFull, shiftEndFull);
+            }
+        } 
+
+        await client.query('COMMIT');
+        console.log(`📝 [BACKGROUND] Hoàn tất tính công cho ${fullName}`);
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("❌ [BACKGROUND DB ERROR]:", err.message);
+    } finally {
+        client.release();
+    }
+};
+
+const findUserActiveShift = async (userId, checkInTime) => {
+  const now = new Date(checkInTime);
+
   const query = `
     SELECT s.shift_id, s.start_time, s.end_time, us.working_date
     FROM user_shifts us
@@ -19,71 +60,62 @@ const findUserActiveShift = async (userId) => {
   `;
 
   const result = await pool.query(query, [userId]);
+  if (result.rows.length === 0) return null;
 
-  if (result.rows.length === 0) {
-    return null; // Không có lịch làm việc
-  }
-
-  // 2. Duyệt qua từng ca làm việc để tìm "Ca mục tiêu"
   for (const row of result.rows) {
-    const { start_time, end_time, working_date, shift_id } = row;
+    const { start_time, end_time, working_date } = row;
 
-    // Ép kiểu Date cho Start và End
-    const d = new Date(working_date);
-    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const dateStr = new Date(working_date).toLocaleDateString('sv-SE');
+    
     let shiftStart = new Date(`${dateStr}T${start_time}+07:00`);
     let shiftEnd   = new Date(`${dateStr}T${end_time}+07:00`);
 
-    // Xử lý ca đêm qua ngày
-    if (shiftEnd < shiftStart) shiftEnd.setDate(shiftEnd.getDate() + 1);
+    if (shiftEnd < shiftStart) {
+        shiftEnd.setDate(shiftEnd.getDate() + 1);
+    }
 
-    // Tính vùng đệm cho phép chấm công của ca này
     const validStart = new Date(shiftStart.getTime() - BUFFER_BEFORE);
     const validEnd   = new Date(shiftEnd.getTime() + BUFFER_AFTER);
 
-    // Bỏ qua nếu thời gian hiện tại vẫn chưa đến giờ cho phép Check-in của ca này
-    if (now < validStart) {
-        continue; 
+    if (now >= validStart && now <= validEnd) {
+        return { activeShift: row, shiftStartFull: shiftStart, shiftEndFull: shiftEnd };
     }
-
-    // Nếu thời gian hiện tại đã vượt qua giờ đóng ca quá lâu (hết hạn chấm công ca này)
-    if (now > validEnd) {
-        continue;
-    }
-    return { activeShift: row, shiftStartFull: shiftStart, shiftEndFull: shiftEnd};
   }
+  
   return null; 
 };
 
-
-
-// Cập nhật bảng công theo Ca làm việc (Giữ nguyên logic của bạn, chỉ thêm chặn lỗi getTime)
-const upsertShiftTimesheet = async (userId, shiftId, workingDate, name, inTime,sStart, sEnd) => {
+const upsertShiftTimesheet = async (client, userId, shiftId, workingDate, name, checkInTime, shiftStart, shiftEnd) => {
   try {
     let status = 'PRESENT';
     let totalMs = 0;
-    const GRACE = 5 * 60 * 1000; // 5 phút ân hạn cho việc đi trễ
+    const GRACE = 5 * 60 * 1000; 
 
-    const isLate = inTime > new Date(sStart.getTime() + GRACE);
+    const isLate = checkInTime > new Date(shiftStart.getTime() + GRACE);
 
     if (isLate) {
       status = 'LATE';
-      totalMs = sEnd - inTime;
+      totalMs = shiftEnd - checkInTime; 
     }
-    else{totalMs = sEnd - sStart;}
+    else {
+      totalMs = shiftEnd - shiftStart;
+    }
+    
     const workingHour = Number((totalMs / 3600000).toFixed(2));
-    await pool.query(`
+
+    await client.query(`
       INSERT INTO shift_timesheets 
       (user_id, shift_id, working_date, first_check_in, last_check_out, working_hour, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT DO NOTHING
-    `, [userId, shiftId, workingDate, inTime, sEnd, workingHour, status]);
+    `, [userId, shiftId, workingDate, checkInTime, shiftEnd, workingHour, status]);
 
     console.log(`📊 ${name} : ${status}`);
 
   } catch (err) {
-    console.error("❌ [SERVICE ERROR]:", err.message);
+    console.error("❌ [UPSERT SERVICE ERROR]:", err.message);
+    throw err;
   }
 };
 
-module.exports = { upsertShiftTimesheet, findUserActiveShift };
+module.exports = { processBackgroundAttendance };
