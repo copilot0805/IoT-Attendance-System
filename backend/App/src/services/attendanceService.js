@@ -6,15 +6,8 @@ const BUFFER_BEFORE = 30 * 60 * 1000;
 const BUFFER_AFTER  = 0; 
 
 const processBackgroundAttendance = async (userId, fullName, imageBuffer, eventId, eventTime) => {
-    // 1. UPLOAD ẢNH
-    try {
-        const image_url = await uploadToCloudinary(imageBuffer);
-        await pool.query(`UPDATE attendance_events SET image_url = $1 WHERE event_id = $2`, [image_url, eventId]);
-    } catch (err) {
-        console.error("❌ [CLOUDINARY ERROR] Lỗi up ảnh:", err.message);
-    }
 
-    // 2. TÍNH CÔNG
+    // 1. TÍNH CÔNG
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -43,6 +36,14 @@ const processBackgroundAttendance = async (userId, fullName, imageBuffer, eventI
         console.error("❌ [BACKGROUND DB ERROR]:", err.message);
     } finally {
         client.release();
+    }
+
+    // 2. UPLOAD ẢNH
+    try {
+        const image_url = await uploadToCloudinary(imageBuffer);
+        await pool.query(`UPDATE attendance_events SET image_url = $1 WHERE event_id = $2`, [image_url, eventId]);
+    } catch (err) {
+        console.error("❌ [CLOUDINARY ERROR] Lỗi up ảnh:", err.message);
     }
 };
 
