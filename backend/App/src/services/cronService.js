@@ -5,38 +5,28 @@ const pool = require('../db');
 const closeAttendanceForYesterday = async () => {
     console.log("🕒 [CRONJOB] Bắt đầu tiến trình chốt sổ chấm công...");
     const client = await pool.connect();
-
     try {
         await client.query('BEGIN');
-
-        // =================================================================
-        // NHIỆM VỤ 1: QUÉT NHỮNG NGƯỜI QUÊN CHECK-OUT -> GẮN 'INCOMPLETE'
-        // =================================================================
-        const incompleteQuery = `
-            UPDATE shift_timesheets
-            SET status = 'INCOMPLETE'
-            WHERE working_date = CURRENT_DATE - INTERVAL '1 day'
-              AND last_out IS NULL
-              AND status = 'WORKING' 
-            RETURNING user_id, shift_id;
-        `;
-        const incompleteRes = await client.query(incompleteQuery);
-        console.log(`⚠️ [CRON] Đã chuyển ${incompleteRes.rowCount} ca thành INCOMPLETE (Quên quét mặt ra về).`);
-
-        // =================================================================
-        // NHIỆM VỤ 2: QUÉT NHỮNG NGƯỜI KHÔNG ĐẾN CÔNG TY -> GẮN 'ABSENT'
-        // =================================================================
         const absentQuery = `
-            INSERT INTO shift_timesheets (user_id, shift_id, working_date, status)
-            SELECT us.user_id, us.shift_id, us.working_date, 'ABSENT'
+            INSERT INTO shift_timesheets 
+                (user_id, shift_id, working_date, status, working_hour, first_check_in, last_check_out)
+            SELECT 
+                us.user_id, 
+                us.shift_id, 
+                us.working_date, 
+                'ABSENT',
+                0,
+                NULL,
+                NULL
             FROM user_shifts us
             LEFT JOIN shift_timesheets st 
                 ON us.user_id = st.user_id 
                 AND us.shift_id = st.shift_id 
                 AND us.working_date = st.working_date
             WHERE us.working_date = CURRENT_DATE - INTERVAL '1 day'
-              AND st.user_id IS NULL -- Điều kiện: Không tồn tại trong bảng công
-            RETURNING user_id;
+              AND st.user_id IS NULL
+            ON CONFLICT (user_id, shift_id, working_date) 
+            DO NOTHING;  -- An toàn nếu có race condition
         `;
         const absentRes = await client.query(absentQuery);
         console.log(`❌ [CRON] Đã ghi nhận ${absentRes.rowCount} lượt ABSENT (Vắng mặt không phép).`);
